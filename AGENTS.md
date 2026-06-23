@@ -1,32 +1,42 @@
-# Filora Agent Context
+# Filora Agent Operating Manual
 
-> Read this document before making any code changes.
->
-> Filora is developed primarily using AI-assisted coding tools including Claude Code, Kiro, and Antigravity. This document exists to ensure all agents follow the same principles, architecture, and coding standards.
+Read this document before performing any task.
+
+This repository is developed using multiple AI coding agents:
+
+* Claude Code
+* Kiro
+* Antigravity
+
+All agents must follow the same architecture, conventions, and development philosophy.
+
+---
+
+# Required Reading Order
+
+Before making changes, read:
+
+1. docs/product.md
+2. docs/architecture.md
+3. docs/database.md
 
 ---
 
 # Project Overview
 
-Filora is a multi-cloud Digital Asset Management (DAM) and backup platform.
+Filora is a multi-cloud Digital Asset Management (DAM) platform.
 
-Users can upload, organize, search, manage, and synchronize digital assets through a single interface while Filora automatically manages storage across multiple providers.
+Users upload, organize, synchronize, and manage digital assets.
 
-Supported asset types:
+Storage complexity is abstracted from users.
 
-* Images
-* Videos
-* Documents
-* Archives
-* Generic files
+Users never need to know:
 
-Supported storage providers:
+* where files are stored
+* which storage provider is used
+* which account stores their files
 
-* Cloudinary
-* ImageKit
-* Cloudflare R2
-
-Future providers may be added without changing business logic.
+Filora manages storage automatically.
 
 ---
 
@@ -38,68 +48,156 @@ Filora is a solo-developed project.
 
 Primary goals:
 
-1. Ship working features quickly.
-2. Validate product-market fit.
-3. Keep the codebase simple.
-4. Maintain high code quality.
+1. Ship working features quickly
+2. Validate product-market fit
+3. Keep code maintainable
+4. Minimize operational complexity
 
-Do not optimize for:
-
-* Massive scale
-* Enterprise requirements
-* Multi-region deployments
-* Hypothetical future features
-
----
-
-# Vision
-
-Users should never need to know:
-
-* Which storage provider is used
-* Which account stores their files
-* How storage distribution works
-
-Filora abstracts storage complexity.
-
-Users manage assets.
-
-Filora manages storage.
+Do not optimize for hypothetical future requirements.
 
 ---
 
 # Technology Stack
 
-## Backend
+## API & CLI (Backend)
 
-* TypeScript
-* Bun
-* Elysia
-* Drizzle ORM
-* Neon PostgreSQL
-* Zod v4
-* Oxlint
-* Oxfmt
+* Go 1.23+
+* Fiber v3 (Web Framework)
+* sqlc (Type-safe SQL)
+* PostgreSQL (Neon)
+* validator v10 (Input validation)
+* golang-migrate (Database migrations)
 
-## Frontend
+## Web (Frontend)
 
 * React 19
 * TypeScript
+* TanStack Query (Data fetching)
+* TanStack Router (Routing)
 * Tailwind CSS v4
 * Shadcn UI
 * Zod v4
 
-## Storage
+## Storage Providers
 
 * Cloudinary
 * ImageKit
 * Cloudflare R2
 
+## Backup Storage (Planned)
+
+* Alibaba OSS Archive
+* Google Cloud Storage Archive (alternative)
+
 ---
 
-# Development Philosophy
+# Project Structure
 
-Prioritize:
+Filora consists of three independent applications:
+
+```
+filora-dam/
+├── apps/
+│   ├── api/          # Go REST API server
+│   ├── cli/          # Go CLI client (HTTP client)
+│   └── web/          # React 19 frontend
+├── AGENTS.md
+├── CLAUDE.md
+└── docs/
+```
+
+No shared packages between apps.
+
+Each app is independent.
+
+---
+
+# API Architecture
+
+API uses modular vertical slice architecture.
+
+Each module owns:
+
+* handler (HTTP routes)
+* service (business logic)
+* repository (database access)
+* models (data structures)
+
+Example structure:
+
+```
+apps/api/
+├── cmd/
+│   └── server/
+│       └── main.go
+├── internal/
+│   ├── modules/
+│   │   ├── asset/
+│   │   │   ├── handler.go
+│   │   │   ├── service.go
+│   │   │   ├── repository.go
+│   │   │   └── models.go
+│   │   ├── storage/
+│   │   │   ├── handler.go
+│   │   │   ├── service.go
+│   │   │   ├── repository.go
+│   │   │   ├── models.go
+│   │   │   └── adapters/
+│   │   │       ├── adapter.go
+│   │   │       ├── cloudinary.go
+│   │   │       ├── imagekit.go
+│   │   │       └── r2.go
+│   │   └── account/
+│   │       ├── handler.go
+│   │       ├── service.go
+│   │       ├── repository.go
+│   │       └── models.go
+│   ├── database/
+│   │   ├── db.go
+│   │   ├── migrations/
+│   │   └── queries/
+│   ├── config/
+│   │   └── config.go
+│   └── lib/
+│       └── response.go
+├── go.mod
+└── go.sum
+```
+
+Avoid layer-first architecture.
+
+---
+
+# CLI Architecture
+
+CLI is a thin HTTP client.
+
+CLI communicates with API via REST.
+
+CLI does not contain business logic.
+
+```
+apps/cli/
+├── cmd/
+│   └── filora/
+│       └── main.go
+├── internal/
+│   ├── client/
+│   │   └── api_client.go
+│   └── commands/
+│       ├── upload.go
+│       ├── download.go
+│       ├── list.go
+│       └── delete.go
+├── go.mod
+└── go.sum
+```
+
+---
+
+# Decision Hierarchy
+
+When making technical decisions prioritize:
 
 1. Correctness
 2. Simplicity
@@ -110,15 +208,13 @@ Prioritize:
 
 Do not sacrifice simplicity for theoretical flexibility.
 
-Filora is a product, not an architecture exercise.
-
 ---
 
 # Golden Rules
 
 ## Build First
 
-Prefer shipping working software over designing perfect systems.
+Working software is more important than perfect architecture.
 
 ---
 
@@ -134,143 +230,30 @@ Incorrect abstractions are expensive.
 
 ## Database First
 
-Design database schema first.
+Design order:
 
-Implementation order:
-
-1. Database schema
-2. Repository
-3. Service
-4. API
-5. UI
-
----
-
-## Reuse Existing Patterns
-
-Before introducing new patterns:
-
-1. Search existing code.
-2. Follow established conventions.
-3. Reuse existing solutions.
-
-Consistency is more important than personal preference.
+1. Database schema (SQL migration)
+2. sqlc queries
+3. Repository
+4. Service
+5. Handler (API)
+6. UI
 
 ---
 
-# Architecture
+## Consistency First
 
-Filora uses a modular vertical-slice architecture.
+Follow existing project patterns.
 
-Each module owns its own:
-
-* router
-* service
-* repository
-* schema
-* types
-
-Example:
-
-```text
-src/modules/
-
-  asset/
-    router.ts
-    service.ts
-    repository.ts
-    schema.ts
-    types.ts
-
-  storage/
-    router.ts
-    service.ts
-    repository.ts
-    schema.ts
-    types.ts
-
-  account/
-    router.ts
-    service.ts
-    repository.ts
-    schema.ts
-    types.ts
-```
-
-Avoid layer-first structures such as:
-
-```text
-src/
-  routes/
-  services/
-  repositories/
-  schemas/
-```
+Do not introduce personal architectural preferences.
 
 ---
 
-# Domain Boundaries
-
-## Asset Module
-
-Responsible for:
-
-* asset metadata
-* ownership
-* tagging
-* search
-* asset versioning
-
-Not responsible for:
-
-* storage provider logic
-
----
-
-## Storage Module
-
-Responsible for:
-
-* uploads
-* downloads
-* deletion
-* storage orchestration
-* provider integrations
-
-Not responsible for:
-
-* user management
-* permissions
-
----
-
-## Account Module
-
-Responsible for:
-
-* users
-* quotas
-* permissions
-* subscription plans
-
----
-
-## Dashboard Module
-
-Responsible for:
-
-* metrics
-* statistics
-* reporting
-* storage visibility
-
----
-
-# Storage Philosophy
+# Storage Rules
 
 Storage providers are implementation details.
 
-Business logic must never depend directly on:
+Business logic must never directly depend on:
 
 * Cloudinary SDK
 * ImageKit SDK
@@ -278,51 +261,40 @@ Business logic must never depend directly on:
 
 Only storage adapters may communicate with providers.
 
----
+All adapters implement StorageAdapter interface:
 
-## Required Abstraction
-
-```ts
-interface StorageAdapter {
-  upload(input: UploadInput): Promise<UploadResult>
-
-  download(key: string): Promise<ReadableStream>
-
-  delete(key: string): Promise<void>
-
-  exists(key: string): Promise<boolean>
+```go
+type StorageAdapter interface {
+    Upload(ctx context.Context, input UploadInput) (*UploadResult, error)
+    Download(ctx context.Context, key string) (io.ReadCloser, error)
+    Delete(ctx context.Context, key string) error
+    Exists(ctx context.Context, key string) (bool, error)
 }
 ```
 
-All provider implementations must conform to this interface.
-
 ---
 
-# Metadata Philosophy
+# Metadata Rules
 
 Files live in storage.
 
 Truth lives in PostgreSQL.
 
-Business logic must rely on metadata stored in the database.
-
-Never use storage providers as the source of truth.
+Business logic must never use cloud storage as the source of truth.
 
 ---
 
-# API Philosophy
+# API Rules
 
-The API is the primary interface.
+API is the source of business logic.
 
-Web and CLI are both API clients.
-
-Business logic belongs in services.
+Web and CLI are thin clients.
 
 Business logic must not live in:
 
-* routers
 * React components
 * CLI commands
+* Handlers (keep handlers thin)
 
 ---
 
@@ -330,58 +302,58 @@ Business logic must not live in:
 
 All external input must be validated.
 
-Sources include:
+Sources:
 
 * HTTP requests
 * Query parameters
 * Route parameters
-* CLI arguments
 * Environment variables
 * Webhook payloads
+* CLI arguments
 
-Use Zod v4.
+Use Go validator v10 for struct validation.
 
 Never trust external data.
 
 ---
 
-# TypeScript Rules
+# Go Rules
 
-Enable strict mode.
+Follow standard Go conventions:
+
+* Use `gofmt` for formatting
+* Use `golangci-lint` for linting
+* Handle errors explicitly - never ignore errors
+* Use interfaces for abstraction (StorageAdapter, Repository)
+* Prefer composition over inheritance
+* Use `context.Context` for cancellation and timeouts
+* Follow Go naming conventions (PascalCase for exported, camelCase for unexported)
 
 Avoid:
 
-```ts
-any
-```
+* `panic()` except for unrecoverable startup errors
+* `interface{}` prefer concrete types or specific interfaces
+* Global variables except for config
 
-Prefer:
-
-```ts
-unknown
-```
-
-and validate appropriately.
-
-Use explicit types for public APIs.
-
-Prefer inferred types internally.
+Keep functions small and focused.
 
 ---
 
 # Database Rules
 
-Drizzle schema is the source of truth.
+SQL migrations are the source of truth.
 
-Every schema change must include:
+Every schema change requires:
 
-1. Schema update
-2. Migration
+1. SQL migration file (timestamp_name.up.sql)
+2. sqlc query definitions
 3. Repository update
 
-Never modify production schema without migrations.
+Never modify production schemas manually.
 
-Avoid raw SQL unless absolutely necessary.
+Use sqlc for type-safe SQL queries.
+
+Write explicit SQL - avoid ORMs for complex operations.
 
 ---
 
@@ -395,6 +367,8 @@ Repositories are responsible for:
 
 Repositories must not contain business logic.
 
+Repositories use sqlc generated code.
+
 ---
 
 # Service Rules
@@ -405,19 +379,19 @@ Services are responsible for:
 * orchestration
 * workflows
 
-Services should coordinate repositories and adapters.
+Services coordinate repositories and adapters.
 
 ---
 
-# Router Rules
+# Handler Rules
 
-Routers are responsible for:
+Handlers are responsible for:
 
 * request validation
 * calling services
 * returning responses
 
-Routers must remain thin.
+Handlers must remain thin.
 
 ---
 
@@ -444,7 +418,7 @@ Error:
 }
 ```
 
-Maintain consistent response structures across all endpoints.
+Maintain consistent response structure.
 
 ---
 
@@ -454,8 +428,8 @@ Avoid:
 
 * N+1 queries
 * unnecessary joins
-* full table scans
 * loading unused relations
+* full table scans
 
 Prefer explicit selects.
 
@@ -467,29 +441,36 @@ Measure before optimizing.
 
 # Error Handling
 
-Prefer simple, understandable errors.
+In Go, handle errors explicitly:
 
-Avoid creating excessive error hierarchies.
+```go
+result, err := service.DoSomething(ctx)
+if err != nil {
+    return fmt.Errorf("failed to do something: %w", err)
+}
+```
 
-Start simple.
+Use error wrapping with `%w` for error chains.
 
-Only introduce specialized errors when a real need exists.
+Return errors up the stack.
+
+Convert errors to HTTP responses in handlers.
 
 ---
 
 # Testing Philosophy
 
-Prioritize testing:
+Prioritize:
 
-1. Repository behavior
-2. Service behavior
-3. Critical workflows
+* repository tests
+* service tests
+* workflow tests
 
-Prefer integration tests over heavily mocked unit tests.
+Prefer integration tests.
 
-Avoid testing implementation details.
+Avoid excessive mocking.
 
-Test observable behavior.
+Test observable behavior, not implementation details.
 
 ---
 
@@ -501,22 +482,24 @@ Log important events:
 * downloads
 * deletions
 * storage failures
-* provider failures
+* backup failures
 
-Logs should help diagnose problems.
+Use structured logging (e.g., zerolog, zap).
 
-Avoid excessive logging noise.
+Avoid noisy logs.
 
 ---
 
 # Observability
 
-Future observability stack:
+Future stack:
 
 * OpenTelemetry
 * Grafana LGTM
 
-Current MVP should prioritize simplicity.
+Current MVP:
+
+Keep observability simple.
 
 Do not introduce complex observability frameworks unless required.
 
@@ -526,15 +509,14 @@ Do not introduce complex observability frameworks unless required.
 
 Prefer:
 
-```ts
-const asset = await repository.findById(id)
+```go
+asset, err := repo.FindByID(ctx, id)
 ```
 
 Over:
 
-```ts
-const assetEntityAggregateRoot =
-  await repository.findById(id)
+```go
+assetEntityAggregateRoot, err := repo.FindByID(ctx, id)
 ```
 
 Use concise, descriptive names.
@@ -543,96 +525,78 @@ Avoid unnecessary verbosity.
 
 ---
 
-# Avoid These Patterns
-
-Do not introduce:
-
-* GenericRepository<T>
-* BaseRepository
-* BaseService
-* ServiceFactory
-* RepositoryFactory
-* AbstractFactory
-* CQRS
-* Event Sourcing
-* Domain Events
-* Dependency Injection Containers
-* Microservices
-* Plugin Frameworks
-
-Unless explicitly requested.
-
----
-
 # File Organization
 
 Prefer:
 
-```text
+```
 asset/
-  repository.ts
-  service.ts
-  router.ts
+  handler.go
+  service.go
+  repository.go
+  models.go
 ```
 
 Over:
 
-```text
-repositories/
-  asset.repository.ts
+```
+handlers/
+  asset_handler.go
 
 services/
-  asset.service.ts
+  asset_service.go
 
-routers/
-  asset.router.ts
+repositories/
+  asset_repository.go
 ```
 
 Modules should own their code.
 
 ---
 
-# Agent Behavior
+# Forbidden Patterns
 
-Before making changes:
+Do not introduce:
 
-1. Understand the feature request.
-2. Search for existing implementations.
-3. Follow existing conventions.
-4. Minimize code changes.
-5. Avoid unrelated refactors.
+* Generic repositories
+* Base repositories
+* Base services
+* Repository factories
+* Service factories
+* CQRS
+* Event Sourcing
+* Domain Events
+* Dependency Injection Containers
+* Plugin Frameworks
+* Microservices
 
-When unsure:
-
-Prefer the simplest implementation.
+Unless explicitly requested.
 
 ---
 
-# Non Goals
+# Agent Behaviour
 
-Filora is not:
+Before making changes:
 
-* Google Drive clone
-* Dropbox clone
-* Social media platform
-* Image editor
-* Video editor
-* CDN replacement
+1. Understand the request
+2. Search existing code
+3. Follow conventions
+4. Reuse existing implementations
+5. Minimize changes
+6. Avoid unrelated refactors
 
-Filora focuses on:
+When uncertain:
 
-* Asset management
-* Storage orchestration
-* Backup
-* Synchronization
-* Multi-cloud storage abstraction
+Choose the simplest implementation.
 
 ---
 
 # Final Rule
 
-Every abstraction must justify its existence.
+Filora is a product.
 
-If a solution feels overly clever, choose the simpler alternative.
+Not an architecture exercise.
+
+Every abstraction must justify its existence.
 
 Working software beats perfect architecture.
