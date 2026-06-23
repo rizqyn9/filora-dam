@@ -4,18 +4,20 @@ This document outlines the development phases for `apps/api`.
 
 ---
 
-# Phase 0: Project Setup
+# Phase 0: Project Setup ✅ COMPLETE
 
 **Goal**: Initialize Go project with proper structure
 
+**Status**: ✅ Complete (2026-06-23)
+
 ## Tasks
 
-- [ ] Initialize Go module (`go mod init`)
-- [ ] Create directory structure
-- [ ] Set up `.gitignore`
-- [ ] Create `.env.example`
-- [ ] Set up `Makefile` for common tasks
-- [ ] Install core dependencies:
+- [x] Initialize Go module (`go mod init`)
+- [x] Create directory structure
+- [x] Set up `.gitignore`
+- [x] Create `.env.example`
+- [x] Set up `Makefile` for common tasks
+- [x] Install core dependencies:
   - Fiber v3
   - pgx (PostgreSQL driver)
   - sqlc
@@ -25,74 +27,89 @@ This document outlines the development phases for `apps/api`.
 
 ## Deliverables
 
-- Working Go project structure
-- Dependency management configured
-- Development tooling ready
+- ✅ Working Go project structure
+- ✅ Dependency management configured
+- ✅ Development tooling ready
+
+**Commit**: `a81a2f2` feat(phase-0): initialize Go backend with complete project setup
 
 ---
 
-# Phase 1: Core Infrastructure
+# Phase 1: Core Infrastructure ✅ COMPLETE
 
 **Goal**: Set up database, config, and basic HTTP server
+
+**Status**: ✅ Complete (2026-06-24)
 
 ## Tasks
 
 ### 1.1 Configuration
 
-- [ ] Create `internal/config/config.go`
-- [ ] Load environment variables
-- [ ] Validate configuration with validator
-- [ ] Support for:
+- [x] Create `internal/config/config.go`
+- [x] Load environment variables
+- [x] Validate configuration with validator
+- [x] Support for:
   - Server port
   - Database URL
   - Storage provider credentials
 
 ### 1.2 Database Setup
 
-- [ ] Create `internal/database/db.go`
-- [ ] Set up PostgreSQL connection pool
-- [ ] Create migrations directory
-- [ ] Set up golang-migrate
-- [ ] Create initial schema migration
-- [ ] Set up sqlc configuration
+- [x] Create `internal/database/db.go`
+- [x] Set up PostgreSQL connection pool
+- [x] Create migrations directory
+- [x] Set up golang-migrate
+- [x] Create initial schema migration
+- [x] Set up sqlc configuration
+- [x] Run migrations on Neon PostgreSQL
+- [x] Generate sqlc code
 
 ### 1.3 HTTP Server
 
-- [ ] Create `cmd/server/main.go`
-- [ ] Initialize Fiber app
-- [ ] Set up middleware:
+- [x] Create `cmd/server/main.go`
+- [x] Initialize Fiber app
+- [x] Set up middleware:
   - Logger
   - Recovery
   - CORS
-- [ ] Health check endpoint (`GET /health`)
-- [ ] Root endpoint (`GET /`)
+- [x] Health check endpoint (`GET /health`)
+- [x] Root endpoint (`GET /`)
+- [x] Graceful shutdown
 
 ### 1.4 Response Utilities
 
-- [ ] Create `internal/lib/response.go`
-- [ ] Implement success response helper
-- [ ] Implement error response helper
-- [ ] Define standard response structures
+- [x] Create `internal/lib/response.go`
+- [x] Implement success response helper
+- [x] Implement error response helper
+- [x] Define standard response structures
 
 ## Deliverables
 
-- Running HTTP server
-- Database connection working
-- Health check responding
-- Configuration validated
-- Standard response format
+- ✅ Running HTTP server (port 9000)
+- ✅ Database connection working (Neon PostgreSQL)
+- ✅ Health check responding
+- ✅ Configuration validated
+- ✅ Standard response format
+- ✅ Account module MVP working
+- ✅ Test data seeded
+
+**Commits**: 
+- `5c38368` feat(phase-1): add database schema, sqlc queries, and account module
+- `71ed37d` feat(phase-1): complete core infrastructure with working API
 
 ---
 
-# Phase 2: Account Module (MVP)
+# Phase 2: Account Module (MVP) 🔄 IN PROGRESS
 
-**Goal**: Basic user account management
+**Goal**: Basic user account management + Authentication
+
+**Status**: 🔄 Partially Complete (Basic endpoints done, auth in progress)
 
 ## Tasks
 
-### 2.1 Database Schema
+### 2.1 Database Schema ✅ DONE
 
-- [ ] Create migration: `users` table
+- [x] Create migration: `users` table
   - id (UUID, primary key)
   - email (unique)
   - name
@@ -102,46 +119,69 @@ This document outlines the development phases for `apps/api`.
   - created_at
   - updated_at
 
-### 2.2 sqlc Queries
+### 2.2 sqlc Queries ✅ DONE
 
-- [ ] Define queries in `internal/database/queries/account.sql`:
+- [x] Define queries in `internal/database/queries/account.sql`:
   - FindUserByID
   - FindUserByEmail
   - CreateUser
   - UpdateStorageUsed
 
-### 2.3 Repository
+### 2.3 Repository ✅ DONE
 
-- [ ] Create `internal/modules/account/repository.go`
-- [ ] Implement repository using sqlc generated code
-- [ ] Add context support
+- [x] Create `internal/modules/account/repository.go`
+- [x] Implement repository using sqlc generated code
+- [x] Add context support
+- [x] Fix UUID conversion helpers
 
-### 2.4 Models
+### 2.4 Models ✅ DONE
 
-- [ ] Create `internal/modules/account/models.go`
-- [ ] Define request/response structs
-- [ ] Add validation tags
+- [x] Create `internal/modules/account/models.go`
+- [x] Define request/response structs
+- [x] Add validation tags
 
-### 2.5 Service
+### 2.5 Service ✅ DONE (Basic)
 
-- [ ] Create `internal/modules/account/service.go`
-- [ ] Implement business logic:
+- [x] Create `internal/modules/account/service.go`
+- [x] Implement business logic:
   - Get user by ID
   - Check storage quota
   - Update storage usage
 
-### 2.6 Handler
+### 2.6 Handler ✅ DONE (Basic)
 
-- [ ] Create `internal/modules/account/handler.go`
-- [ ] Implement routes:
-  - `GET /api/v1/account/:id` - Get user info
-  - `GET /api/v1/account/:id/quota` - Get quota info
+- [x] Create `internal/modules/account/handler.go`
+- [x] Implement routes:
+  - `GET /api/v1/account/:id` - Get user info ✅
+  - `GET /api/v1/account/:id/quota` - Get quota info ✅
+
+### 2.7 Authentication (TODO)
+
+- [ ] Password utilities (`internal/lib/password.go`)
+  - Hash password with bcrypt
+  - Verify password
+- [ ] JWT utilities (`internal/lib/jwt.go`)
+  - Generate JWT token
+  - Validate JWT token
+  - Extract claims
+- [ ] Auth service methods
+  - Register user
+  - Login user
+  - Validate credentials
+- [ ] Auth handler routes
+  - `POST /api/v1/auth/register`
+  - `POST /api/v1/auth/login`
+- [ ] Auth middleware (`internal/middleware/auth.go`)
+  - Validate JWT from Authorization header
+  - Extract user context
+  - Protect endpoints
 
 ## Deliverables
 
-- Working account endpoints
-- User management foundation
-- Quota tracking ready
+- ✅ Working account endpoints (GET)
+- ✅ User management foundation
+- ✅ Quota tracking ready
+- ⏳ Authentication system (in progress)
 
 ---
 

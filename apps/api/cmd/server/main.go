@@ -48,9 +48,12 @@ func main() {
 		AllowHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization"},
 	}))
 
+	// Initialize JWT manager
+	jwtManager := lib.NewJWTManager(cfg.JWTSecret)
+
 	// Initialize modules
 	accountRepo := account.NewRepository(db.Pool)
-	accountService := account.NewService(accountRepo)
+	accountService := account.NewService(accountRepo, jwtManager)
 	accountHandler := account.NewHandler(accountService)
 
 	// Routes
