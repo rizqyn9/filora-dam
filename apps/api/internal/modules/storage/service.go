@@ -1,11 +1,15 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/rizqynugroho9/filora-dam/api/internal/lib"
+	"github.com/rizqynugroho9/filora-dam/api/internal/modules/asset"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/storage/adapters"
 )
 
@@ -16,12 +20,16 @@ var (
 )
 
 type Service struct {
-	repo *Repository
+	repo        *Repository
+	assetRepo   *asset.Repository
+	assetService *asset.Service
 }
 
-func NewService(repo *Repository) *Service {
+func NewService(repo *Repository, assetRepo *asset.Repository, assetService *asset.Service) *Service {
 	return &Service{
-		repo: repo,
+		repo:         repo,
+		assetRepo:    assetRepo,
+		assetService: assetService,
 	}
 }
 
@@ -148,4 +156,100 @@ func isValidProviderType(providerType string) bool {
 		"r2":         true,
 	}
 	return validTypes[providerType]
+}
+
+// UploadFile handles the complete file upload workflow
+func (s *Service) UploadFile(ctx context.Context, userID string, file io.Reader, filename string, size int64) (*asset.Asset, error) {
+	// Read file into memory for hashing and uploading
+	fileBytes, err := io.ReadAll(file)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	// Calculate hash
+	hash := lib.HashBytes(fileBytes)
+
+	// Detect MIME type
+	mimeType := lib.DetectMimeType(filename)
+	assetType := string(lib.GetAssetType(mimeType))
+
+	// Check for duplicate
+	existingAsset, err := s.assetRepo.GetByHash(ctx, hash, userID)
+	if err == nil && existingAsset != nil {
+		// Asset with same hash already exists, return it
+		return existingAsset, nil
+	}
+
+	// Select storage provider
+	provider, err := s.SelectProvider(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create adapter
+	adapter, err := s.CreateAdapter(provider)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create adapter: %w", err)
+	}
+
+	// Upload to provider
+	uploadInput := &adapters.UploadInput{
+		File:     bytes.NewReader(fileBytes),
+		Filename: filename,
+		MimeType: mimeType,
+		Size:     size,
+	}
+
+	uploadResult, err := adapter.Upload(ctx, uploadInput)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upload to provider: %w", err)
+	}
+
+	// Create asset
+	assetReq := &asset.CreateAssetRequest{
+		Name:     filename,
+		Type:     assetType,
+		MimeType: mimeType,
+		Size:     uploadResult.Size,
+		Hash:     hash,
+		Tags:     []string{},
+		Metadata: uploadResult.Metadata,
+	}
+
+	newAsset, err := s.assetService.CreateAsset(ctx, userID, assetReq)
+	if err != nil {
+		// Try to cleanup uploaded file
+		_ = adapter.Delete(ctx, uploadResult.Key)
+		return nil, fmt.Errorf("failed to create asset: %w", err)
+	}
+
+	// Create storage location
+	location := &asset.StorageLocation{
+		AssetID:     newAsset.ID,
+		ProviderID:  provider.ID,
+		ProviderKey: uploadResult.Key,
+		URL:         uploadResult.URL,
+		Metadata:    uploadResult.Metadata,
+	}
+
+	_, err = s.assetService.CreateLocation(ctx, location)
+	if err != nil {
+		// Try to cleanup
+		_ = adapter.Delete(ctx, uploadResult.Key)
+		_ = s.assetService.DeleteAsset(ctx, newAsset.ID, userID)
+		return nil, fmt.Errorf("failed to create location: %w", err)
+	}
+
+	// Update provider usage
+	newUsage := provider.Used + uploadResult.Size
+	if err := s.repo.UpdateProviderUsage(ctx, provider.ID, newUsage); err != nil {
+		// Non-fatal, log and continue
+		fmt.Printf("Warning: failed to update provider usage: %v\n", err)
+	}
+
+	// TODO: Update user quota (Phase 5 enhancement)
+
+	// Return asset with location
+	newAsset.Locations = []*asset.StorageLocation{location}
+	return newAsset, nil
 }

@@ -29,6 +29,9 @@ func (h *Handler) RegisterRoutes(app *fiber.App, authMiddleware fiber.Handler) {
 	storage.Post("/providers", h.CreateProvider)
 	storage.Get("/providers/:id", h.GetProvider)
 	storage.Delete("/providers/:id", h.DeactivateProvider)
+
+	// Upload
+	storage.Post("/upload", h.Upload)
 }
 
 func (h *Handler) ListProviders(c fiber.Ctx) error {
@@ -145,5 +148,36 @@ func (h *Handler) DeactivateProvider(c fiber.Ctx) error {
 
 	return lib.Success(c, fiber.Map{
 		"message": "Provider deactivated successfully",
+	})
+}
+
+func (h *Handler) Upload(c fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
+		return lib.Unauthorized(c, "User not authenticated")
+	}
+
+	// Parse multipart form
+	file, err := c.FormFile("file")
+	if err != nil {
+		return lib.BadRequest(c, "File is required")
+	}
+
+	// Open file
+	src, err := file.Open()
+	if err != nil {
+		return lib.InternalError(c, "Failed to open file")
+	}
+	defer src.Close()
+
+	// Upload
+	asset, err := h.service.UploadFile(c.Context(), userID, src, file.Filename, file.Size)
+	if err != nil {
+		return lib.InternalError(c, "Failed to upload file")
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(lib.SuccessResponse{
+		Success: true,
+		Data:    asset,
 	})
 }

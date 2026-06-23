@@ -62,13 +62,13 @@ func main() {
 	accountService := account.NewService(accountRepo, jwtManager)
 	accountHandler := account.NewHandler(accountService)
 
-	storageRepo := storage.NewRepository(db.Pool)
-	storageService := storage.NewService(storageRepo)
-	storageHandler := storage.NewHandler(storageService)
-
 	assetRepo := asset.NewRepository(db.Pool)
 	assetService := asset.NewService(assetRepo)
 	assetHandler := asset.NewHandler(assetService)
+
+	storageRepo := storage.NewRepository(db.Pool)
+	storageService := storage.NewService(storageRepo, assetRepo, assetService)
+	storageHandler := storage.NewHandler(storageService)
 
 	// Routes
 	app.Get("/", func(c fiber.Ctx) error {
