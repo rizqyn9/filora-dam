@@ -14,6 +14,7 @@ import (
 	"github.com/rizqynugroho9/filora-dam/api/internal/config"
 	"github.com/rizqynugroho9/filora-dam/api/internal/database"
 	"github.com/rizqynugroho9/filora-dam/api/internal/lib"
+	"github.com/rizqynugroho9/filora-dam/api/internal/modules/account"
 )
 
 func main() {
@@ -47,6 +48,11 @@ func main() {
 		AllowHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization"},
 	}))
 
+	// Initialize modules
+	accountRepo := account.NewRepository(db.Pool)
+	accountService := account.NewService(accountRepo)
+	accountHandler := account.NewHandler(accountService)
+
 	// Routes
 	app.Get("/", func(c fiber.Ctx) error {
 		return lib.Success(c, fiber.Map{
@@ -61,6 +67,9 @@ func main() {
 			"status": "ok",
 		})
 	})
+
+	// Register module routes
+	accountHandler.RegisterRoutes(app)
 
 	// Start server
 	addr := fmt.Sprintf(":%s", cfg.Port)
