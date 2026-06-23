@@ -232,6 +232,92 @@ func (r *Repository) Delete(ctx context.Context, assetID string) error {
 	return r.queries.DeleteAsset(ctx, aid)
 }
 
+func (r *Repository) SearchByName(ctx context.Context, userID, query string, limit, offset int) ([]*Asset, error) {
+	uid, err := stringToPgUUID(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	assets, err := r.queries.SearchAssetsByName(ctx, db.SearchAssetsByNameParams{
+		UserID: uid,
+		Name:   "%" + query + "%",
+		Limit:  int32(limit),
+		Offset: int32(offset),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*Asset, 0, len(assets))
+	for _, a := range assets {
+		var metadata map[string]interface{}
+		if len(a.Metadata) > 0 {
+			if err := json.Unmarshal(a.Metadata, &metadata); err != nil {
+				metadata = nil
+			}
+		}
+
+		result = append(result, &Asset{
+			ID:        pgUUIDToString(a.ID),
+			UserID:    pgUUIDToString(a.UserID),
+			Name:      a.Name,
+			Type:      a.Type,
+			MimeType:  a.MimeType,
+			Size:      a.Size,
+			Hash:      a.Hash,
+			Tags:      a.Tags,
+			Metadata:  metadata,
+			CreatedAt: a.CreatedAt.Time,
+			UpdatedAt: a.UpdatedAt.Time,
+		})
+	}
+
+	return result, nil
+}
+
+func (r *Repository) FilterByType(ctx context.Context, userID, assetType string, limit, offset int) ([]*Asset, error) {
+	uid, err := stringToPgUUID(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	assets, err := r.queries.FilterAssetsByType(ctx, db.FilterAssetsByTypeParams{
+		UserID: uid,
+		Type:   assetType,
+		Limit:  int32(limit),
+		Offset: int32(offset),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*Asset, 0, len(assets))
+	for _, a := range assets {
+		var metadata map[string]interface{}
+		if len(a.Metadata) > 0 {
+			if err := json.Unmarshal(a.Metadata, &metadata); err != nil {
+				metadata = nil
+			}
+		}
+
+		result = append(result, &Asset{
+			ID:        pgUUIDToString(a.ID),
+			UserID:    pgUUIDToString(a.UserID),
+			Name:      a.Name,
+			Type:      a.Type,
+			MimeType:  a.MimeType,
+			Size:      a.Size,
+			Hash:      a.Hash,
+			Tags:      a.Tags,
+			Metadata:  metadata,
+			CreatedAt: a.CreatedAt.Time,
+			UpdatedAt: a.UpdatedAt.Time,
+		})
+	}
+
+	return result, nil
+}
+
 // Storage location methods
 
 func (r *Repository) GetLocationsByAssetID(ctx context.Context, assetID string) ([]*StorageLocation, error) {

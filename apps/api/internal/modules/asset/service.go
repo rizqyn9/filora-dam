@@ -151,3 +151,65 @@ func (s *Service) CreateLocation(ctx context.Context, location *StorageLocation)
 	}
 	return loc, nil
 }
+
+// SearchAssets searches assets by name for a user
+func (s *Service) SearchAssets(ctx context.Context, userID, query string, limit, offset int) (*AssetListResponse, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	assets, err := s.repo.SearchByName(ctx, userID, query, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search assets: %w", err)
+	}
+
+	// Count total matches
+	total, err := s.repo.CountByUser(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count assets: %w", err)
+	}
+
+	return &AssetListResponse{
+		Assets: assets,
+		Total:  total,
+		Limit:  limit,
+		Offset: offset,
+	}, nil
+}
+
+// FilterAssets filters assets by type for a user
+func (s *Service) FilterAssets(ctx context.Context, userID, assetType string, limit, offset int) (*AssetListResponse, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	assets, err := s.repo.FilterByType(ctx, userID, assetType, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to filter assets: %w", err)
+	}
+
+	// Count total by type
+	total, err := s.repo.CountByUser(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count assets: %w", err)
+	}
+
+	return &AssetListResponse{
+		Assets: assets,
+		Total:  total,
+		Limit:  limit,
+		Offset: offset,
+	}, nil
+}

@@ -26,6 +26,8 @@ func (h *Handler) RegisterRoutes(app *fiber.App, authMiddleware fiber.Handler) {
 	assets.Use(authMiddleware)
 
 	assets.Get("/", h.ListAssets)
+	assets.Get("/search", h.SearchAssets)
+	assets.Get("/filter/:type", h.FilterAssets)
 	assets.Get("/:id", h.GetAsset)
 	assets.Delete("/:id", h.DeleteAsset)
 	assets.Put("/:id/tags", h.UpdateTags)
@@ -133,4 +135,48 @@ func (h *Handler) UpdateTags(c fiber.Ctx) error {
 	return lib.Success(c, fiber.Map{
 		"message": "Tags updated successfully",
 	})
+}
+
+func (h *Handler) SearchAssets(c fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
+		return lib.Unauthorized(c, "User not authenticated")
+	}
+
+	query := c.Query("q")
+	if query == "" {
+		return lib.BadRequest(c, "Search query is required")
+	}
+
+	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+
+	response, err := h.service.SearchAssets(c.Context(), userID, query, limit, offset)
+	if err != nil {
+		return lib.InternalError(c, "Failed to search assets")
+	}
+
+	return lib.Success(c, response)
+}
+
+func (h *Handler) FilterAssets(c fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
+		return lib.Unauthorized(c, "User not authenticated")
+	}
+
+	assetType := c.Params("type")
+	if assetType == "" {
+		return lib.BadRequest(c, "Asset type is required")
+	}
+
+	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+
+	response, err := h.service.FilterAssets(c.Context(), userID, assetType, limit, offset)
+	if err != nil {
+		return lib.InternalError(c, "Failed to filter assets")
+	}
+
+	return lib.Success(c, response)
 }
