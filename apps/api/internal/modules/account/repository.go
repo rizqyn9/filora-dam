@@ -21,14 +21,27 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	}
 }
 
-func (r *Repository) GetByID(ctx context.Context, id string) (*User, error) {
+// Helper to convert string to pgtype.UUID
+func stringToPgUUID(id string) (pgtype.UUID, error) {
 	parsedUUID, err := uuid.Parse(id)
 	if err != nil {
-		return nil, err
+		return pgtype.UUID{}, err
 	}
 
-	var userID pgtype.UUID
-	if err := userID.Scan(parsedUUID); err != nil {
+	return pgtype.UUID{
+		Bytes: parsedUUID,
+		Valid: true,
+	}, nil
+}
+
+// Helper to convert pgtype.UUID to string
+func pgUUIDToString(pgUUID pgtype.UUID) string {
+	return uuid.UUID(pgUUID.Bytes).String()
+}
+
+func (r *Repository) GetByID(ctx context.Context, id string) (*User, error) {
+	userID, err := stringToPgUUID(id)
+	if err != nil {
 		return nil, err
 	}
 
@@ -38,7 +51,7 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*User, error) {
 	}
 
 	return &User{
-		ID:           uuid.UUID(user.ID.Bytes).String(),
+		ID:           pgUUIDToString(user.ID),
 		Email:        user.Email,
 		Name:         user.Name,
 		StorageQuota: user.StorageQuota,
@@ -67,7 +80,7 @@ func (r *Repository) Create(ctx context.Context, email, name, passwordHash strin
 	}
 
 	return &User{
-		ID:           uuid.UUID(user.ID.Bytes).String(),
+		ID:           pgUUIDToString(user.ID),
 		Email:        user.Email,
 		Name:         user.Name,
 		StorageQuota: user.StorageQuota,
@@ -78,13 +91,8 @@ func (r *Repository) Create(ctx context.Context, email, name, passwordHash strin
 }
 
 func (r *Repository) UpdateStorageUsed(ctx context.Context, userID string, used int64) error {
-	parsedUUID, err := uuid.Parse(userID)
+	id, err := stringToPgUUID(userID)
 	if err != nil {
-		return err
-	}
-
-	var id pgtype.UUID
-	if err := id.Scan(parsedUUID); err != nil {
 		return err
 	}
 
@@ -96,13 +104,8 @@ func (r *Repository) UpdateStorageUsed(ctx context.Context, userID string, used 
 }
 
 func (r *Repository) GetQuota(ctx context.Context, userID string) (*QuotaInfo, error) {
-	parsedUUID, err := uuid.Parse(userID)
+	id, err := stringToPgUUID(userID)
 	if err != nil {
-		return nil, err
-	}
-
-	var id pgtype.UUID
-	if err := id.Scan(parsedUUID); err != nil {
 		return nil, err
 	}
 

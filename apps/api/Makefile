@@ -30,10 +30,12 @@ clean: ## Clean build artifacts
 	@rm -f coverage.out
 
 migrate-up: ## Run database migrations up
-	@migrate -path internal/database/migrations -database "$(DATABASE_URL)" up
+	@test -f .env && export $$(cat .env | grep -v '^#' | xargs) && \
+	migrate -path internal/database/migrations -database "$$DATABASE_URL" up
 
 migrate-down: ## Run database migrations down
-	@migrate -path internal/database/migrations -database "$(DATABASE_URL)" down
+	@test -f .env && export $$(cat .env | grep -v '^#' | xargs) && \
+	migrate -path internal/database/migrations -database "$$DATABASE_URL" down
 
 migrate-create: ## Create a new migration (use: make migrate-create name=create_users)
 	@migrate create -ext sql -dir internal/database/migrations -seq $(name)
