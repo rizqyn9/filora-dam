@@ -94,7 +94,7 @@ func (s *Service) DeactivateProvider(ctx context.Context, providerID string) err
 	return nil
 }
 
-// SelectProvider selects an available provider for upload (simple round-robin for now)
+// SelectProvider selects an available provider using quota-aware selection
 func (s *Service) SelectProvider(ctx context.Context, userID string) (*Provider, error) {
 	providers, err := s.repo.ListActiveProviders(ctx, userID)
 	if err != nil {
@@ -105,9 +105,31 @@ func (s *Service) SelectProvider(ctx context.Context, userID string) (*Provider,
 		return nil, ErrNoActiveProvider
 	}
 
-	// Simple strategy: return first active provider
-	// TODO: Implement better selection strategy in Phase 7
-	return providers[0], nil
+	// Quota-aware selection: prefer provider with most available space
+	var selected *Provider
+	var maxAvailable int64 = -1
+
+	for _, p := range providers {
+		// If no quota set, treat as unlimited
+		available := int64(9223372036854775807) // Max int64
+		if p.Quota != nil && *p.Quota > 0 {
+			available = *p.Quota - p.Used
+			if available <= 0 {
+				continue // Skip providers with no space
+			}
+		}
+
+		if available > maxAvailable {
+			maxAvailable = available
+			selected = p
+		}
+	}
+
+	if selected == nil {
+		return nil, ErrNoActiveProvider
+	}
+
+	return selected, nil
 }
 
 // CreateAdapter creates a storage adapter for a provider
