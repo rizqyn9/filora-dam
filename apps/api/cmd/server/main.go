@@ -16,6 +16,7 @@ import (
 	"github.com/rizqynugroho9/filora-dam/api/internal/lib"
 	"github.com/rizqynugroho9/filora-dam/api/internal/middleware"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/account"
+	"github.com/rizqynugroho9/filora-dam/api/internal/modules/asset"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/storage"
 )
 
@@ -65,6 +66,10 @@ func main() {
 	storageService := storage.NewService(storageRepo)
 	storageHandler := storage.NewHandler(storageService)
 
+	assetRepo := asset.NewRepository(db.Pool)
+	assetService := asset.NewService(assetRepo)
+	assetHandler := asset.NewHandler(assetService)
+
 	// Routes
 	app.Get("/", func(c fiber.Ctx) error {
 		return lib.Success(c, fiber.Map{
@@ -83,6 +88,7 @@ func main() {
 	// Register module routes
 	accountHandler.RegisterRoutes(app)
 	storageHandler.RegisterRoutes(app, authMiddleware)
+	assetHandler.RegisterRoutes(app, authMiddleware)
 
 	// Start server
 	addr := fmt.Sprintf(":%s", cfg.Port)
