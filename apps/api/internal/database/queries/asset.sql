@@ -52,3 +52,24 @@ SELECT * FROM assets
 WHERE user_id = $1 AND type = $2
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4;
+
+-- name: GetDashboardStats :one
+SELECT
+    COUNT(*) as total_assets,
+    COALESCE(SUM(size), 0) as total_size,
+    COUNT(DISTINCT type) as unique_types
+FROM assets
+WHERE user_id = $1;
+
+-- name: GetAssetsByTypeCount :many
+SELECT type, COUNT(*) as count
+FROM assets
+WHERE user_id = $1
+GROUP BY type
+ORDER BY count DESC;
+
+-- name: GetRecentAssets :many
+SELECT * FROM assets
+WHERE user_id = $1
+ORDER BY created_at DESC
+LIMIT $2;

@@ -192,6 +192,105 @@ func (q *Queries) GetAssetByID(ctx context.Context, id pgtype.UUID) (Asset, erro
 	return i, err
 }
 
+const getAssetsByTypeCount = `-- name: GetAssetsByTypeCount :many
+SELECT type, COUNT(*) as count
+FROM assets
+WHERE user_id = $1
+GROUP BY type
+ORDER BY count DESC
+`
+
+type GetAssetsByTypeCountRow struct {
+	Type  string `json:"type"`
+	Count int64  `json:"count"`
+}
+
+func (q *Queries) GetAssetsByTypeCount(ctx context.Context, userID pgtype.UUID) ([]GetAssetsByTypeCountRow, error) {
+	rows, err := q.db.Query(ctx, getAssetsByTypeCount, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetAssetsByTypeCountRow{}
+	for rows.Next() {
+		var i GetAssetsByTypeCountRow
+		if err := rows.Scan(&i.Type, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getDashboardStats = `-- name: GetDashboardStats :one
+SELECT
+    COUNT(*) as total_assets,
+    COALESCE(SUM(size), 0) as total_size,
+    COUNT(DISTINCT type) as unique_types
+FROM assets
+WHERE user_id = $1
+`
+
+type GetDashboardStatsRow struct {
+	TotalAssets int64       `json:"total_assets"`
+	TotalSize   interface{} `json:"total_size"`
+	UniqueTypes int64       `json:"unique_types"`
+}
+
+func (q *Queries) GetDashboardStats(ctx context.Context, userID pgtype.UUID) (GetDashboardStatsRow, error) {
+	row := q.db.QueryRow(ctx, getDashboardStats, userID)
+	var i GetDashboardStatsRow
+	err := row.Scan(&i.TotalAssets, &i.TotalSize, &i.UniqueTypes)
+	return i, err
+}
+
+const getRecentAssets = `-- name: GetRecentAssets :many
+SELECT id, user_id, name, type, mime_type, size, hash, tags, metadata, created_at, updated_at FROM assets
+WHERE user_id = $1
+ORDER BY created_at DESC
+LIMIT $2
+`
+
+type GetRecentAssetsParams struct {
+	UserID pgtype.UUID `json:"user_id"`
+	Limit  int32       `json:"limit"`
+}
+
+func (q *Queries) GetRecentAssets(ctx context.Context, arg GetRecentAssetsParams) ([]Asset, error) {
+	rows, err := q.db.Query(ctx, getRecentAssets, arg.UserID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Asset{}
+	for rows.Next() {
+		var i Asset
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Name,
+			&i.Type,
+			&i.MimeType,
+			&i.Size,
+			&i.Hash,
+			&i.Tags,
+			&i.Metadata,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAssetsByUser = `-- name: ListAssetsByUser :many
 SELECT id, user_id, name, type, mime_type, size, hash, tags, metadata, created_at, updated_at FROM assets
 WHERE user_id = $1
