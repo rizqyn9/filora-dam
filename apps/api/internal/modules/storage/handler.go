@@ -32,6 +32,9 @@ func (h *Handler) RegisterRoutes(app *fiber.App, authMiddleware fiber.Handler) {
 
 	// Upload
 	storage.Post("/upload", h.Upload)
+
+	// Download
+	storage.Get("/download/:id", h.Download)
 }
 
 func (h *Handler) ListProviders(c fiber.Ctx) error {
@@ -180,4 +183,29 @@ func (h *Handler) Upload(c fiber.Ctx) error {
 		Success: true,
 		Data:    asset,
 	})
+}
+
+func (h *Handler) Download(c fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
+		return lib.Unauthorized(c, "User not authenticated")
+	}
+
+	assetID := c.Params("id")
+	if assetID == "" {
+		return lib.BadRequest(c, "Asset ID is required")
+	}
+
+	// Download file
+	rc, err := h.service.DownloadFile(c.Context(), assetID, userID)
+	if err != nil {
+		if errors.Is(err, ErrNoActiveProvider) {
+			return lib.BadRequest(c, "No storage provider available")
+		}
+		return lib.InternalError(c, "Failed to download file")
+	}
+	defer rc.Close()
+
+	// Stream file
+	return c.SendStream(rc)
 }

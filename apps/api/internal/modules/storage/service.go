@@ -253,3 +253,39 @@ func (s *Service) UploadFile(ctx context.Context, userID string, file io.Reader,
 	newAsset.Locations = []*asset.StorageLocation{location}
 	return newAsset, nil
 }
+
+// DownloadFile handles the complete file download workflow
+func (s *Service) DownloadFile(ctx context.Context, assetID, userID string) (io.ReadCloser, error) {
+	// Get asset metadata
+	assetData, err := s.assetService.GetByID(ctx, assetID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get asset: %w", err)
+	}
+
+	// Get storage location (prefer first available)
+	if len(assetData.Locations) == 0 {
+		return nil, fmt.Errorf("no storage location found for asset")
+	}
+
+	location := assetData.Locations[0]
+
+	// Get provider
+	provider, err := s.GetProviderByID(ctx, location.ProviderID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get storage provider: %w", err)
+	}
+
+	// Create adapter
+	adapter, err := s.CreateAdapter(provider)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create adapter: %w", err)
+	}
+
+	// Download from provider
+	rc, err := adapter.Download(ctx, location.ProviderKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download from provider: %w", err)
+	}
+
+	return rc, nil
+}
