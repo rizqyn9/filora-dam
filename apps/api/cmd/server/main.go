@@ -14,7 +14,9 @@ import (
 	"github.com/rizqynugroho9/filora-dam/api/internal/config"
 	"github.com/rizqynugroho9/filora-dam/api/internal/database"
 	"github.com/rizqynugroho9/filora-dam/api/internal/lib"
+	"github.com/rizqynugroho9/filora-dam/api/internal/middleware"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/account"
+	"github.com/rizqynugroho9/filora-dam/api/internal/modules/storage"
 )
 
 func main() {
@@ -51,10 +53,17 @@ func main() {
 	// Initialize JWT manager
 	jwtManager := lib.NewJWTManager(cfg.JWTSecret)
 
+	// Initialize auth middleware
+	authMiddleware := middleware.AuthMiddleware(jwtManager)
+
 	// Initialize modules
 	accountRepo := account.NewRepository(db.Pool)
 	accountService := account.NewService(accountRepo, jwtManager)
 	accountHandler := account.NewHandler(accountService)
+
+	storageRepo := storage.NewRepository(db.Pool)
+	storageService := storage.NewService(storageRepo)
+	storageHandler := storage.NewHandler(storageService)
 
 	// Routes
 	app.Get("/", func(c fiber.Ctx) error {
@@ -73,6 +82,7 @@ func main() {
 
 	// Register module routes
 	accountHandler.RegisterRoutes(app)
+	storageHandler.RegisterRoutes(app, authMiddleware)
 
 	// Start server
 	addr := fmt.Sprintf(":%s", cfg.Port)

@@ -185,15 +185,17 @@ This document outlines the development phases for `apps/api`.
 
 ---
 
-# Phase 3: Storage Module Foundation
+# Phase 3: Storage Module Foundation ✅ COMPLETE
 
 **Goal**: Storage abstraction layer and provider management
 
+**Status**: ✅ Complete (2026-06-24)
+
 ## Tasks
 
-### 3.1 Database Schema
+### 3.1 Database Schema ✅ DONE (in Phase 1)
 
-- [ ] Create migration: `storage_providers` table
+- [x] Create migration: `storage_providers` table
   - id (UUID, primary key)
   - user_id (foreign key to users)
   - name
@@ -205,60 +207,71 @@ This document outlines the development phases for `apps/api`.
   - created_at
   - updated_at
 
-### 3.2 Storage Adapter Interface
+### 3.2 Storage Adapter Interface ✅ DONE
 
-- [ ] Create `internal/modules/storage/adapters/adapter.go`
-- [ ] Define `StorageAdapter` interface
-- [ ] Define `UploadInput` struct
-- [ ] Define `UploadResult` struct
+- [x] Create `internal/modules/storage/adapters/adapter.go`
+- [x] Define `StorageAdapter` interface
+- [x] Define `UploadInput` struct
+- [x] Define `UploadResult` struct
 
-### 3.3 Provider Adapters (Stubs)
+### 3.3 Provider Adapters (Stubs) ✅ DONE
 
-- [ ] Create stub adapters (return not implemented):
-  - `cloudinary.go`
-  - `imagekit.go`
-  - `r2.go`
+- [x] Create stub adapters (return not implemented):
+  - `cloudinary.go` ✅
+  - `imagekit.go` ✅
+  - `r2.go` ✅
 
-### 3.4 sqlc Queries
+### 3.4 sqlc Queries ✅ DONE (in Phase 1)
 
-- [ ] Define queries in `internal/database/queries/storage.sql`:
+- [x] Define queries in `internal/database/queries/storage.sql`:
   - FindProviderByID
   - FindActiveProviders
   - CreateProvider
   - UpdateProviderUsage
 
-### 3.5 Repository
+### 3.5 Repository ✅ DONE
 
-- [ ] Create `internal/modules/storage/repository.go`
-- [ ] Implement provider management
+- [x] Create `internal/modules/storage/repository.go`
+- [x] Implement provider management
+- [x] UUID conversion helpers
+- [x] JSONB credential handling
 
-### 3.6 Models
+### 3.6 Models ✅ DONE
 
-- [ ] Create `internal/modules/storage/models.go`
-- [ ] Define provider models
-- [ ] Define upload/download models
+- [x] Create `internal/modules/storage/models.go`
+- [x] Define provider models
+- [x] Define upload/download models
+- [x] Request/response structs
 
-### 3.7 Service
+### 3.7 Service ✅ DONE
 
-- [ ] Create `internal/modules/storage/service.go`
-- [ ] Implement:
+- [x] Create `internal/modules/storage/service.go`
+- [x] Implement:
   - Provider registration
-  - Provider selection logic (stub)
+  - Provider selection logic (simple strategy)
   - Adapter initialization
+  - Credential validation
 
-### 3.8 Handler
+### 3.8 Handler ✅ DONE
 
-- [ ] Create `internal/modules/storage/handler.go`
-- [ ] Implement routes:
-  - `GET /api/v1/storage/providers` - List providers
-  - `POST /api/v1/storage/providers` - Add provider
-  - `GET /api/v1/storage/providers/:id` - Get provider
+- [x] Create `internal/modules/storage/handler.go`
+- [x] Implement routes (all protected with JWT):
+  - `GET /api/v1/storage/providers` - List providers ✅
+  - `POST /api/v1/storage/providers` - Add provider ✅
+  - `GET /api/v1/storage/providers/:id` - Get provider ✅
+  - `DELETE /api/v1/storage/providers/:id` - Deactivate provider ✅
+- [x] User ownership verification
+- [x] Credentials hidden in responses
 
 ## Deliverables
 
-- Storage provider management
-- Adapter interface defined
-- Foundation for uploads ready
+- ✅ Storage provider management working
+- ✅ Adapter interface defined
+- ✅ All 3 providers stubbed (Cloudinary, ImageKit, R2)
+- ✅ JWT protected endpoints
+- ✅ Foundation for uploads ready
+
+**Commit**: Phase 3 complete with storage abstraction layer
 
 ---
 
