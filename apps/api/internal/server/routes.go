@@ -52,4 +52,10 @@ func registerRoutes(app *fiber.App, deps Deps) {
 	if deps.Gallery != nil {
 		deps.Gallery.RegisterRoutes(v1, deps.AuthMW)
 	}
+	if deps.Album != nil {
+		deps.Album.RegisterRoutes(v1, deps.AuthMW)
+	}
+	if deps.Tag != nil {
+		deps.Tag.RegisterRoutes(v1, deps.AuthMW)
+	}
 }

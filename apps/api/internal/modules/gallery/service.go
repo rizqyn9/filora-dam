@@ -35,6 +35,19 @@ func (s *Service) Membership(ctx context.Context, galleryID, userID int64) (stri
 	return string(role), nil
 }
 
+// RoleOf returns a user's local role in a gallery and whether they are a member.
+// Convenient for cross-module access checks (no sentinel error coupling).
+func (s *Service) RoleOf(ctx context.Context, galleryID, userID int64) (string, bool, error) {
+	role, err := s.repo.GetMemberRole(ctx, galleryID, userID)
+	if errors.Is(err, ErrNotMember) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return string(role), true, nil
+}
+
 // EnsureDefaultGallery creates the user's default gallery if missing (idempotent).
 func (s *Service) EnsureDefaultGallery(ctx context.Context, userID int64) error {
 	_, err := s.repo.GetDefault(ctx, userID)
