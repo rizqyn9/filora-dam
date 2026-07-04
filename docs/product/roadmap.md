@@ -9,18 +9,33 @@ working family DAM quickly, validate it, and keep the code maintainable.
 
 - ✅ **Database design** is complete and is the source of truth
   ([schema.sql](../../apps/api/internal/database/schema.sql), [docs](../database/README.md)).
-- 🟡 **API** has a **legacy implementation** (JWT + password auth, per-user
-  assets, single-layer storage) that predates the current design.
+- ✅ **API rebuild (phases 0–9)** implemented on the target design: Clerk auth,
+  RBAC, CLI sessions, galleries, albums, tags, storage accounts, assets, the
+  archive worker, and the dashboard. See
+  [implementation-plan.md](../architecture/implementation-plan.md) and
+  [apps/api/API.md](../../apps/api/API.md).
+- 🟡 **Storage adapters** are stubbed (`ErrNotImplemented`) — uploads and archive
+  replication are non-functional until a concrete provider SDK + credentials are
+  wired.
 - 🟡 **Web** app is scaffolded (React 19 + Vite + shadcn).
 - 🔭 **CLI** not started.
 
-## The legacy → target gap
+## Remaining before end-to-end
 
-The current API code and the new design differ in important ways. This is the
-work ahead:
+1. Implement at least one real `StorageAdapter` (Cloudinary/ImageKit/R2/GCS) so
+   uploads and archive replication work against live storage.
+2. Configure Clerk (keys + webhook) and a storage account; grant the owner the
+   `superuser` role.
+3. Broaden tests (repository/service/workflow against a test database).
+4. Build the web app and CLI against the API.
 
-| Area | Legacy (current code) | Target (designed) |
-|------|-----------------------|-------------------|
+## Legacy → target (done)
+
+The legacy implementation was removed and rebuilt on the target design. For
+reference, the shifts that were made:
+
+| Area | Legacy (removed) | Now |
+|------|------------------|-----|
 | Auth | JWT + bcrypt passwords | Clerk (web) + opaque CLI tokens |
 | Authorization | Owner-only checks | RBAC (roles + scope) + membership roles |
 | Users | Local accounts | Clerk mirror (webhook + JIT) |
@@ -31,9 +46,10 @@ work ahead:
 | Delete | Hard delete | Soft delete (trash) |
 | Migrations | golang-migrate | Manual `schema.sql` (no migrate) |
 
-## Suggested implementation order
+## Implementation order (reference)
 
-Following the project's **database-first** rule (schema → queries → repository →
+The rebuild followed the project's **database-first** rule (schema → queries →
+repository →
 service → handler → UI). A detailed, phased build plan lives in
 [architecture/implementation-plan.md](../architecture/implementation-plan.md).
 

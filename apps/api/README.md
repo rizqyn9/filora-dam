@@ -3,15 +3,15 @@
 The Go REST API server — the source of all business logic for Filora. The web
 and CLI clients are thin layers over this API.
 
-> **Status — clean-slate rebuild.** The Go code has been fully **reset**; only
-> the finalized database design (`schema.sql`/`seed.sql`) and tooling remain.
-> The whole app is being rebuilt for the **target design** (Clerk auth, RBAC,
-> galleries/albums, two-layer storage) following the
-> [implementation plan](../../docs/architecture/implementation-plan.md).
+> **Status.** Phases 0–9 of the rebuild are implemented: identity (Clerk),
+> RBAC, CLI sessions, galleries, albums, tags, storage accounts, assets, the
+> archive worker, and the dashboard. See the
+> [implementation plan](../../docs/architecture/implementation-plan.md) and
+> [API reference](API.md).
 >
-> Note: the API does not build yet. The legacy [`API.md`](API.md) /
-> [`TESTING.md`](TESTING.md) / [`TESTING_MANUAL.md`](TESTING_MANUAL.md) are kept
-> (banner-marked) for reference and will be rewritten during the rebuild.
+> **Remaining:** concrete storage-provider SDKs (Cloudinary/ImageKit/R2/GCS) are
+> stubbed (`ErrNotImplemented`), so uploads/archive replication are non-functional
+> until an adapter + credentials are wired. See [storage adapters](internal/modules/storage/adapters).
 
 ## Tech Stack
 
@@ -19,7 +19,8 @@ and CLI clients are thin layers over this API.
 - **PostgreSQL** (Neon) via **pgx/v5**
 - **sqlc** — type-safe SQL codegen
 - **validator v10** — input validation
-- **Clerk** — web auth _(target; legacy code uses JWT/bcrypt)_
+- **Clerk** — web auth; opaque CLI tokens for the terminal
+- **zerolog** — structured logging
 
 ## Prerequisites
 
@@ -63,31 +64,18 @@ make clean           # Remove build artifacts
 
 ## Project Structure
 
-The Go code has been **reset to a clean slate**. Only the database design and
-tooling remain; everything is rebuilt following
-[project-structure.md](../../docs/architecture/project-structure.md) per the
-[implementation plan](../../docs/architecture/implementation-plan.md).
-
-Present:
-
 ```
 apps/api/
-├── internal/database/
-│   ├── schema.sql               # Canonical schema (source of truth, manual apply)
-│   └── seed.sql                 # Baseline RBAC roles/permissions
-├── API.md · TESTING*.md         # legacy reference (banner-marked)
+├── cmd/
+│   ├── server/main.go           # HTTP API (compose root)
+│   └── worker/main.go           # archive replication worker
+├── internal/
+│   ├── config/                  # env load + validation
+│   ├── database/                # pgx pool, schema.sql, seed.sql, queries/, db/ (sqlc)
+│   ├── server/ · middleware/ · auth/ · lib/
+│   └── modules/{account,session,rbac,gallery,album,tag,asset,storage,dashboard}/
+├── API.md · TESTING.md
 ├── sqlc.yaml · Makefile · go.mod · go.sum · .env.example
-```
-
-Target layout to build (see
-[project-structure.md](../../docs/architecture/project-structure.md)):
-
-```
-apps/api/
-├── cmd/server/main.go · cmd/worker/main.go
-└── internal/
-    ├── config/ · database/{db.go,queries/,db/} · server/ · middleware/ · auth/ · lib/
-    └── modules/{account,session,rbac,gallery,album,tag,asset,storage,dashboard}/
 ```
 
 ### Module structure (vertical slice)
@@ -102,10 +90,6 @@ internal/modules/<module>/
 └── models.go        # Data structures
 ```
 
-_Planned modules (target):_ `account` (Clerk users), `rbac` (roles/permissions),
-`session` (CLI tokens), `gallery`, `album`, `tag`, `asset`, `storage`
-(providers + adapters + two-layer orchestration), `dashboard`.
-
 ### Adding a feature (database-first)
 
 1. Update `internal/database/schema.sql`.
@@ -116,7 +100,7 @@ _Planned modules (target):_ `account` (Clerk users), `rbac` (roles/permissions),
 
 ## Environment Variables
 
-Target (see [`.env.example`](.env.example)):
+See [`.env.example`](.env.example):
 
 ```
 PORT=3000
@@ -130,15 +114,12 @@ CLI_TOKEN_TTL_HOURS=720
 Storage provider credentials are stored **per account in the database**
 (`storage_providers.credentials`), not in env.
 
-> _Legacy note:_ the current code still expects a `JWT_SECRET` and per-provider
-> env vars until the Clerk + DB-managed-account migration lands.
-
 ## Documentation
 
 - [Docs index](../../docs/README.md)
 - [Architecture](../../docs/architecture/README.md) · [Auth](../../docs/architecture/auth.md) · [Storage](../../docs/architecture/storage.md)
 - [Database](../../docs/database/README.md)
-- [API reference](API.md) _(legacy)_
+- [API reference](API.md) · [Testing](TESTING.md)
 - [Engineering rules](../../AGENTS.md)
 
 ## License

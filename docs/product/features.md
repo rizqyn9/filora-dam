@@ -2,11 +2,19 @@
 
 What Filora does, grouped by area. Each feature notes its **status**:
 
-- ✅ **designed** — modeled in the database/design; ready to implement
-- 🟡 **partial** — some legacy implementation exists but differs from target
+- ✅ **done** — implemented in the API (phases 0–9)
+- 🟡 **adapter-gated** — implemented, but blocked end-to-end until a concrete
+  storage adapter (Cloudinary/ImageKit/R2/GCS) + credentials are wired
 - 🔭 **backlog** — planned, intentionally deferred
 
-See [roadmap.md](./roadmap.md) for sequencing and the legacy→target gap.
+See [roadmap.md](./roadmap.md) for the current status and remaining work, and
+[apps/api/API.md](../../apps/api/API.md) for the endpoint reference.
+
+> The tables below were authored during design; treat the legend above as the
+> current source of truth. Auth, RBAC, CLI sessions, galleries, albums, tags,
+> storage-account management, asset metadata/dedup/quota/trash, the archive
+> worker, and the dashboard are **implemented**. Only physical upload/download
+> and archive replication are **adapter-gated**.
 
 ---
 
