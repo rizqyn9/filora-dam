@@ -3,17 +3,15 @@
 The Go REST API server — the source of all business logic for Filora. The web
 and CLI clients are thin layers over this API.
 
-> **Status — rebuild in progress.** The legacy implementation (JWT/password auth,
-> per-user assets, single-layer storage) has been **removed** to make way for a
-> fresh implementation of the **target design** (Clerk auth, RBAC, galleries/
-> albums, two-layer storage). What remains is the finalized database design plus
-> neutral infrastructure; the modules, config, auth, and HTTP layer are being
-> rebuilt from scratch. See the [roadmap](../../docs/product/roadmap.md).
+> **Status — clean-slate rebuild.** The Go code has been fully **reset**; only
+> the finalized database design (`schema.sql`/`seed.sql`) and tooling remain.
+> The whole app is being rebuilt for the **target design** (Clerk auth, RBAC,
+> galleries/albums, two-layer storage) following the
+> [implementation plan](../../docs/architecture/implementation-plan.md).
 >
-> Note: the API will not build until the entry point and modules are rebuilt.
-> The legacy [`API.md`](API.md) / [`TESTING.md`](TESTING.md) /
-> [`TESTING_MANUAL.md`](TESTING_MANUAL.md) are kept (banner-marked) for reference
-> and will be rewritten alongside the new implementation.
+> Note: the API does not build yet. The legacy [`API.md`](API.md) /
+> [`TESTING.md`](TESTING.md) / [`TESTING_MANUAL.md`](TESTING_MANUAL.md) are kept
+> (banner-marked) for reference and will be rewritten during the rebuild.
 
 ## Tech Stack
 
@@ -65,33 +63,31 @@ make clean           # Remove build artifacts
 
 ## Project Structure
 
-Current state after removing the legacy implementation — kept: the database
-design plus neutral infrastructure. The rest is to be rebuilt.
+The Go code has been **reset to a clean slate**. Only the database design and
+tooling remain; everything is rebuilt following
+[project-structure.md](../../docs/architecture/project-structure.md) per the
+[implementation plan](../../docs/architecture/implementation-plan.md).
+
+Present:
 
 ```
 apps/api/
-├── internal/
-│   ├── database/
-│   │   ├── schema.sql            # Canonical schema (source of truth, manual apply)
-│   │   ├── seed.sql              # Baseline RBAC roles/permissions
-│   │   └── db.go                 # pgx connection pool
-│   └── lib/                      # Neutral helpers: response.go, hash.go, mime.go
-├── API.md                        # API reference (legacy — see banner)
-├── sqlc.yaml
-├── Makefile
-├── go.mod / go.sum
+├── internal/database/
+│   ├── schema.sql               # Canonical schema (source of truth, manual apply)
+│   └── seed.sql                 # Baseline RBAC roles/permissions
+├── API.md · TESTING*.md         # legacy reference (banner-marked)
+├── sqlc.yaml · Makefile · go.mod · go.sum · .env.example
 ```
 
-Target layout to rebuild (see [architecture overview](../../docs/architecture/overview.md)):
+Target layout to build (see
+[project-structure.md](../../docs/architecture/project-structure.md)):
 
 ```
 apps/api/
-├── cmd/server/main.go            # Entry point
+├── cmd/server/main.go · cmd/worker/main.go
 └── internal/
-    ├── config/                   # Environment configuration (validator v10)
-    ├── database/queries/         # SQL queries for sqlc → internal/database/db/ (generated)
-    ├── middleware/               # Clerk + CLI token auth
-    └── modules/                  # Feature modules (vertical slice)
+    ├── config/ · database/{db.go,queries/,db/} · server/ · middleware/ · auth/ · lib/
+    └── modules/{account,session,rbac,gallery,album,tag,asset,storage,dashboard}/
 ```
 
 ### Module structure (vertical slice)
