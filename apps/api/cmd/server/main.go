@@ -17,6 +17,7 @@ import (
 	"github.com/rizqynugroho9/filora-dam/api/internal/middleware"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/account"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/rbac"
+	"github.com/rizqynugroho9/filora-dam/api/internal/modules/session"
 	"github.com/rizqynugroho9/filora-dam/api/internal/server"
 )
 
@@ -52,6 +53,10 @@ func main() {
 	rbacSvc := rbac.NewService(rbacRepo)
 	rbacHandler := rbac.NewHandler(rbacSvc, authorizer)
 
+	sessionRepo := session.NewRepository(db.Pool)
+	sessionSvc := session.NewService(sessionRepo, cfg.CLITokenTTLHours)
+	sessionHandler := session.NewHandler(sessionSvc)
+
 	// Auth: Clerk verifier is optional (nil rejects protected routes gracefully).
 	var clerkVerifier middleware.ClerkVerifier
 	if cfg.ClerkSecretKey != "" {
@@ -61,6 +66,7 @@ func main() {
 	}
 	authMW := middleware.RequireAuth(middleware.AuthDeps{
 		Clerk:    clerkVerifier,
+		Sessions: sessionSvc,
 		Accounts: accountSvc,
 	})
 
@@ -70,6 +76,7 @@ func main() {
 		AuthMW:  authMW,
 		Account: accountHandler,
 		RBAC:    rbacHandler,
+		Session: sessionHandler,
 	})
 
 	go func() {

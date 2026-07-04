@@ -46,4 +46,7 @@ func registerRoutes(app *fiber.App, deps Deps) {
 	if deps.RBAC != nil {
 		deps.RBAC.RegisterRoutes(v1, deps.AuthMW)
 	}
+	if deps.Session != nil {
+		deps.Session.RegisterRoutes(v1, deps.AuthMW)
+	}
 }
