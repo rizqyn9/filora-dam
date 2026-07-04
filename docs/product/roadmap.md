@@ -34,7 +34,8 @@ work ahead:
 ## Suggested implementation order
 
 Following the project's **database-first** rule (schema → queries → repository →
-service → handler → UI):
+service → handler → UI). A detailed, phased build plan lives in
+[architecture/implementation-plan.md](../architecture/implementation-plan.md).
 
 1. **Foundations**
    - Apply new `schema.sql` + `seed.sql` to Neon.
