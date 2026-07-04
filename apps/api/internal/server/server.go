@@ -11,6 +11,7 @@ import (
 	"github.com/rizqynugroho9/filora-dam/api/internal/database"
 	"github.com/rizqynugroho9/filora-dam/api/internal/lib"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/account"
+	"github.com/rizqynugroho9/filora-dam/api/internal/modules/rbac"
 )
 
 // Deps are the dependencies required to build the HTTP server. As modules are
@@ -20,6 +21,7 @@ type Deps struct {
 	DB      *database.DB
 	AuthMW  fiber.Handler
 	Account *account.Handler
+	RBAC    *rbac.Handler
 }
 
 // New builds the Fiber application with global middleware and routes.

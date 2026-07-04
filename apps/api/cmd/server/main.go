@@ -10,11 +10,13 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	"github.com/rizqynugroho9/filora-dam/api/internal/auth"
 	"github.com/rizqynugroho9/filora-dam/api/internal/clerk"
 	"github.com/rizqynugroho9/filora-dam/api/internal/config"
 	"github.com/rizqynugroho9/filora-dam/api/internal/database"
 	"github.com/rizqynugroho9/filora-dam/api/internal/middleware"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/account"
+	"github.com/rizqynugroho9/filora-dam/api/internal/modules/rbac"
 	"github.com/rizqynugroho9/filora-dam/api/internal/server"
 )
 
@@ -44,6 +46,12 @@ func main() {
 	accountSvc := account.NewService(accountRepo)
 	accountHandler := account.NewHandler(accountSvc, cfg.ClerkWebhookSigningSecret)
 
+	authorizer := auth.NewAuthorizer(db.Pool)
+
+	rbacRepo := rbac.NewRepository(db.Pool)
+	rbacSvc := rbac.NewService(rbacRepo)
+	rbacHandler := rbac.NewHandler(rbacSvc, authorizer)
+
 	// Auth: Clerk verifier is optional (nil rejects protected routes gracefully).
 	var clerkVerifier middleware.ClerkVerifier
 	if cfg.ClerkSecretKey != "" {
@@ -61,6 +69,7 @@ func main() {
 		DB:      db,
 		AuthMW:  authMW,
 		Account: accountHandler,
+		RBAC:    rbacHandler,
 	})
 
 	go func() {
