@@ -1,0 +1,25 @@
+{
+  // Multi-root workspace — the recommended way to open Filora in VS Code.
+  //
+  // Opening each app as its own folder makes the Oxc language server treat
+  // apps/web as a workspace folder: it auto-detects the local oxlint/oxfmt
+  // binaries, resolves .oxlintrc.json / .oxfmtrc.json relative to that folder,
+  // and applies apps/web/.vscode/settings.json. This sidesteps any "VS Code
+  // only reads the root config" problem entirely.
+  //
+  // Open with:  code filora.code-workspace
+  "folders": [
+    { "name": "web", "path": "apps/web" },
+    { "name": "api", "path": "apps/api" },
+    { "name": "cli", "path": "apps/cli" },
+    { "name": "root", "path": "." }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/.git": true
+    }
+  },
+  "extensions": {
+    "recommendations": ["oxc.oxc-vscode", "golang.go"]
+  }
+}

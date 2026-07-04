@@ -1,0 +1,48 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "react", "jsx-a11y", "import"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "env": {
+    "browser": true,
+    "es2024": true
+  },
+  "settings": {
+    "react": {
+      "linkComponents": [{ "name": "Link", "linkAttribute": "to" }]
+    }
+  },
+  "rules": {
+    "eslint/no-console": ["warn", { "allow": ["warn", "error"] }],
+    "eslint/no-unused-vars": [
+      "error",
+      { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }
+    ],
+    "typescript/consistent-type-imports": "warn",
+    "import/no-cycle": "error",
+    "import/no-unassigned-import": ["error", { "allow": ["**/*.css"] }],
+    "unicorn/filename-case": [
+      "error",
+      { "cases": { "kebabCase": true, "pascalCase": true } }
+    ],
+    "react/react-in-jsx-scope": "off"
+  },
+  "overrides": [
+    {
+      "files": ["src/components/ui/**"],
+      "rules": {
+        "unicorn/filename-case": "off",
+        "typescript/no-explicit-any": "off"
+      }
+    },
+    {
+      "files": ["**/*.config.{ts,js}", "vite.config.ts"],
+      "rules": {
+        "eslint/no-console": "off"
+      }
+    }
+  ],
+  "ignorePatterns": ["dist", "node_modules", "src/routeTree.gen.ts"]
+}

@@ -1,0 +1,43 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────
+  // Oxc (oxlint + oxfmt) — monorepo setup
+  //
+  // WHY THIS WORKS ACROSS apps/*:
+  // Both oxlint and oxfmt auto-discover the *nearest* config file per file
+  // (nested config). So `apps/web/.oxlintrc.json` + `apps/web/.oxfmtrc.json`
+  // are picked up automatically for anything under apps/web — even though this
+  // repo is opened at the root.
+  //
+  // CRITICAL: `oxc.configPath` MUST stay empty/null. Setting it pins a single
+  // config AND disables nested lookup — that is what makes VS Code appear to
+  // "only read the root config". Same for `oxc.fmt.configPath`.
+  // ─────────────────────────────────────────────────────────────────────────
+  "oxc.configPath": null,
+  "oxc.fmt.configPath": null,
+  "oxc.enable.oxlint": true,
+  "oxc.enable.oxfmt": true,
+  // oxfmt support in the extension is behind this experimental flag for now.
+  "oxc.fmt.experimental": true,
+  "oxc.lint.run": "onType",
+
+  // Binaries are auto-detected from the nearest node_modules. If detection ever
+  // fails when opening the repo root directly, either open via
+  // filora.code-workspace (recommended) or uncomment and point these at the
+  // web app's local install:
+  // "oxc.path.oxlint": "apps/web/node_modules/.bin/oxlint",
+  // "oxc.path.oxfmt": "apps/web/node_modules/.bin/oxfmt",
+
+  // Use oxc as the formatter + fixer, scoped to JS/TS/JSON so Go files are
+  // left to the Go extension.
+  "[javascript][javascriptreact][typescript][typescriptreact]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.oxc": "explicit"
+    }
+  },
+  "[json][jsonc]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "editor.formatOnSave": true
+  }
+}
