@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -95,6 +96,36 @@ func (r *Repository) Deactivate(ctx context.Context, id int64) error {
 
 func (r *Repository) AddUsed(ctx context.Context, id, delta int64) error {
 	return r.q.AddStorageProviderUsed(ctx, db.AddStorageProviderUsedParams{ID: id, Used: delta})
+}
+
+func (r *Repository) CreateLocation(ctx context.Context, assetID uuid.UUID, providerID int64, layer, key string, url *string, status string) error {
+	_, err := r.q.CreateStorageLocation(ctx, db.CreateStorageLocationParams{
+		AssetID:     assetID,
+		ProviderID:  providerID,
+		Layer:       db.StorageLayer(layer),
+		ProviderKey: key,
+		Url:         url,
+		Status:      db.LocationStatus(status),
+	})
+	return err
+}
+
+func (r *Repository) GetServingURL(ctx context.Context, assetID uuid.UUID) (string, bool, error) {
+	url, err := r.q.GetServingLocationURL(ctx, assetID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	if url == nil {
+		return "", false, nil
+	}
+	return *url, true, nil
+}
+
+func (r *Repository) EnqueueArchive(ctx context.Context, assetID uuid.UUID) error {
+	return r.q.EnqueueArchiveJob(ctx, assetID)
 }
 
 func (r *Repository) Usage(ctx context.Context) ([]AccountUsage, error) {

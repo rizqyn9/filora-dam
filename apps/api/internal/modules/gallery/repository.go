@@ -107,6 +107,10 @@ func (r *Repository) Delete(ctx context.Context, id int64) error {
 	return r.q.DeleteGallery(ctx, id)
 }
 
+func (r *Repository) AddUsed(ctx context.Context, id, delta int64) error {
+	return r.q.AddGalleryUsed(ctx, db.AddGalleryUsedParams{ID: id, StorageUsed: delta})
+}
+
 // --- members ---
 
 func (r *Repository) GetMemberRole(ctx context.Context, galleryID, userID int64) (db.MemberRole, error) {

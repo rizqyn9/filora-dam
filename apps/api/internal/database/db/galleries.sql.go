@@ -12,6 +12,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addGalleryUsed = `-- name: AddGalleryUsed :exec
+UPDATE galleries SET storage_used = storage_used + $2 WHERE id = $1
+`
+
+type AddGalleryUsedParams struct {
+	ID          int64 `json:"id"`
+	StorageUsed int64 `json:"storage_used"`
+}
+
+func (q *Queries) AddGalleryUsed(ctx context.Context, arg AddGalleryUsedParams) error {
+	_, err := q.db.Exec(ctx, addGalleryUsed, arg.ID, arg.StorageUsed)
+	return err
+}
+
 const createGallery = `-- name: CreateGallery :one
 INSERT INTO galleries (owner_id, name, description, is_default)
 VALUES ($1, $2, $3, $4)

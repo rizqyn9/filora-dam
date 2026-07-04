@@ -61,4 +61,7 @@ func registerRoutes(app *fiber.App, deps Deps) {
 	if deps.Storage != nil {
 		deps.Storage.RegisterRoutes(v1, deps.AuthMW)
 	}
+	if deps.Asset != nil {
+		deps.Asset.RegisterRoutes(v1, deps.AuthMW)
+	}
 }

@@ -32,3 +32,18 @@ SELECT id, name, layer, type, is_active, quota, used,
        location_count, stored_count, pending_count, failed_count
 FROM storage_account_usage
 ORDER BY layer, name;
+
+-- name: CreateStorageLocation :one
+INSERT INTO storage_locations (asset_id, provider_id, layer, provider_key, url, status)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING *;
+
+-- name: GetServingLocationURL :one
+SELECT url FROM storage_locations
+WHERE asset_id = $1 AND layer = 'serving' AND status = 'stored' AND url IS NOT NULL
+LIMIT 1;
+
+-- name: EnqueueArchiveJob :exec
+INSERT INTO archive_sync_jobs (asset_id, target_layer)
+VALUES ($1, 'archive')
+ON CONFLICT (asset_id, target_layer) WHERE status IN ('pending', 'running') DO NOTHING;

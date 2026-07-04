@@ -7,6 +7,8 @@ package db
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
 const addStorageProviderUsed = `-- name: AddStorageProviderUsed :exec
@@ -21,6 +23,46 @@ type AddStorageProviderUsedParams struct {
 func (q *Queries) AddStorageProviderUsed(ctx context.Context, arg AddStorageProviderUsedParams) error {
 	_, err := q.db.Exec(ctx, addStorageProviderUsed, arg.ID, arg.Used)
 	return err
+}
+
+const createStorageLocation = `-- name: CreateStorageLocation :one
+INSERT INTO storage_locations (asset_id, provider_id, layer, provider_key, url, status)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, asset_id, provider_id, layer, provider_key, url, status, metadata, created_at, updated_at
+`
+
+type CreateStorageLocationParams struct {
+	AssetID     uuid.UUID      `json:"asset_id"`
+	ProviderID  int64          `json:"provider_id"`
+	Layer       StorageLayer   `json:"layer"`
+	ProviderKey string         `json:"provider_key"`
+	Url         *string        `json:"url"`
+	Status      LocationStatus `json:"status"`
+}
+
+func (q *Queries) CreateStorageLocation(ctx context.Context, arg CreateStorageLocationParams) (StorageLocation, error) {
+	row := q.db.QueryRow(ctx, createStorageLocation,
+		arg.AssetID,
+		arg.ProviderID,
+		arg.Layer,
+		arg.ProviderKey,
+		arg.Url,
+		arg.Status,
+	)
+	var i StorageLocation
+	err := row.Scan(
+		&i.ID,
+		&i.AssetID,
+		&i.ProviderID,
+		&i.Layer,
+		&i.ProviderKey,
+		&i.Url,
+		&i.Status,
+		&i.Metadata,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const createStorageProvider = `-- name: CreateStorageProvider :one
@@ -71,6 +113,30 @@ UPDATE storage_providers SET is_active = FALSE WHERE id = $1
 func (q *Queries) DeactivateStorageProvider(ctx context.Context, id int64) error {
 	_, err := q.db.Exec(ctx, deactivateStorageProvider, id)
 	return err
+}
+
+const enqueueArchiveJob = `-- name: EnqueueArchiveJob :exec
+INSERT INTO archive_sync_jobs (asset_id, target_layer)
+VALUES ($1, 'archive')
+ON CONFLICT (asset_id, target_layer) WHERE status IN ('pending', 'running') DO NOTHING
+`
+
+func (q *Queries) EnqueueArchiveJob(ctx context.Context, assetID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, enqueueArchiveJob, assetID)
+	return err
+}
+
+const getServingLocationURL = `-- name: GetServingLocationURL :one
+SELECT url FROM storage_locations
+WHERE asset_id = $1 AND layer = 'serving' AND status = 'stored' AND url IS NOT NULL
+LIMIT 1
+`
+
+func (q *Queries) GetServingLocationURL(ctx context.Context, assetID uuid.UUID) (*string, error) {
+	row := q.db.QueryRow(ctx, getServingLocationURL, assetID)
+	var url *string
+	err := row.Scan(&url)
+	return url, err
 }
 
 const getStorageProvider = `-- name: GetStorageProvider :one

@@ -48,6 +48,20 @@ func (s *Service) RoleOf(ctx context.Context, galleryID, userID int64) (string, 
 	return string(role), true, nil
 }
 
+// QuotaInfo returns a gallery's used and quota bytes (for other modules).
+func (s *Service) QuotaInfo(ctx context.Context, galleryID int64) (used, quota int64, err error) {
+	g, err := s.repo.GetByID(ctx, galleryID)
+	if err != nil {
+		return 0, 0, err
+	}
+	return g.StorageUsed, g.StorageQuota, nil
+}
+
+// AddUsed adjusts a gallery's used-bytes counter (delta may be negative).
+func (s *Service) AddUsed(ctx context.Context, galleryID, delta int64) error {
+	return s.repo.AddUsed(ctx, galleryID, delta)
+}
+
 // EnsureDefaultGallery creates the user's default gallery if missing (idempotent).
 func (s *Service) EnsureDefaultGallery(ctx context.Context, userID int64) error {
 	_, err := s.repo.GetDefault(ctx, userID)

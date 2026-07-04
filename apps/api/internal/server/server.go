@@ -12,6 +12,7 @@ import (
 	"github.com/rizqynugroho9/filora-dam/api/internal/lib"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/account"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/album"
+	"github.com/rizqynugroho9/filora-dam/api/internal/modules/asset"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/gallery"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/rbac"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/session"
@@ -32,6 +33,7 @@ type Deps struct {
 	Album   *album.Handler
 	Tag     *tag.Handler
 	Storage *storage.Handler
+	Asset   *asset.Handler
 }
 
 // New builds the Fiber application with global middleware and routes.

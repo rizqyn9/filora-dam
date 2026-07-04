@@ -69,3 +69,6 @@ WHERE id = $1;
 UPDATE invitations
 SET status = 'revoked'
 WHERE id = $1 AND gallery_id = $2 AND status = 'pending';
+
+-- name: AddGalleryUsed :exec
+UPDATE galleries SET storage_used = storage_used + $2 WHERE id = $1;
