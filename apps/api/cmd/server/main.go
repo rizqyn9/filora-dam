@@ -18,6 +18,7 @@ import (
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/account"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/album"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/asset"
+	"github.com/rizqynugroho9/filora-dam/api/internal/modules/dashboard"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/gallery"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/rbac"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/session"
@@ -73,6 +74,10 @@ func main() {
 	assetSvc := asset.NewService(assetRepo, authorizer, gallerySvc, storageSvc)
 	assetHandler := asset.NewHandler(assetSvc)
 
+	dashboardRepo := dashboard.NewRepository(db.Pool)
+	dashboardSvc := dashboard.NewService(dashboardRepo, authorizer, gallerySvc)
+	dashboardHandler := dashboard.NewHandler(dashboardSvc)
+
 	// gallery provisions each user's default gallery on first sync
 	accountSvc.SetProvisioner(gallerySvc)
 	accountHandler := account.NewHandler(accountSvc, cfg.ClerkWebhookSigningSecret)
@@ -99,17 +104,18 @@ func main() {
 	})
 
 	app := server.New(server.Deps{
-		Config:  cfg,
-		DB:      db,
-		AuthMW:  authMW,
-		Account: accountHandler,
-		RBAC:    rbacHandler,
-		Session: sessionHandler,
-		Gallery: galleryHandler,
-		Album:   albumHandler,
-		Tag:     tagHandler,
-		Storage: storageHandler,
-		Asset:   assetHandler,
+		Config:    cfg,
+		DB:        db,
+		AuthMW:    authMW,
+		Account:   accountHandler,
+		RBAC:      rbacHandler,
+		Session:   sessionHandler,
+		Gallery:   galleryHandler,
+		Album:     albumHandler,
+		Tag:       tagHandler,
+		Storage:   storageHandler,
+		Asset:     assetHandler,
+		Dashboard: dashboardHandler,
 	})
 
 	go func() {

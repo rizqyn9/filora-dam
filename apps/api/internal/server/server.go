@@ -13,6 +13,7 @@ import (
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/account"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/album"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/asset"
+	"github.com/rizqynugroho9/filora-dam/api/internal/modules/dashboard"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/gallery"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/rbac"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/session"
@@ -23,17 +24,18 @@ import (
 // Deps are the dependencies required to build the HTTP server. As modules are
 // added, their handlers are added here and wired in the compose root.
 type Deps struct {
-	Config  *config.Config
-	DB      *database.DB
-	AuthMW  fiber.Handler
-	Account *account.Handler
-	RBAC    *rbac.Handler
-	Session *session.Handler
-	Gallery *gallery.Handler
-	Album   *album.Handler
-	Tag     *tag.Handler
-	Storage *storage.Handler
-	Asset   *asset.Handler
+	Config    *config.Config
+	DB        *database.DB
+	AuthMW    fiber.Handler
+	Account   *account.Handler
+	RBAC      *rbac.Handler
+	Session   *session.Handler
+	Gallery   *gallery.Handler
+	Album     *album.Handler
+	Tag       *tag.Handler
+	Storage   *storage.Handler
+	Asset     *asset.Handler
+	Dashboard *dashboard.Handler
 }
 
 // New builds the Fiber application with global middleware and routes.
