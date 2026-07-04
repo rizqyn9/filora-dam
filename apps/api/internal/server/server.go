@@ -10,13 +10,16 @@ import (
 	"github.com/rizqynugroho9/filora-dam/api/internal/config"
 	"github.com/rizqynugroho9/filora-dam/api/internal/database"
 	"github.com/rizqynugroho9/filora-dam/api/internal/lib"
+	"github.com/rizqynugroho9/filora-dam/api/internal/modules/account"
 )
 
 // Deps are the dependencies required to build the HTTP server. As modules are
 // added, their handlers are added here and wired in the compose root.
 type Deps struct {
-	Config *config.Config
-	DB     *database.DB
+	Config  *config.Config
+	DB      *database.DB
+	AuthMW  fiber.Handler
+	Account *account.Handler
 }
 
 // New builds the Fiber application with global middleware and routes.

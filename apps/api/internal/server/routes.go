@@ -37,4 +37,10 @@ func registerRoutes(app *fiber.App, deps Deps) {
 			"database": dbStatus,
 		})
 	})
+
+	// Versioned API
+	v1 := app.Group("/api/v1")
+	if deps.Account != nil {
+		deps.Account.RegisterRoutes(v1, deps.AuthMW)
+	}
 }

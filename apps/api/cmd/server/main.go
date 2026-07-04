@@ -10,8 +10,11 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	"github.com/rizqynugroho9/filora-dam/api/internal/clerk"
 	"github.com/rizqynugroho9/filora-dam/api/internal/config"
 	"github.com/rizqynugroho9/filora-dam/api/internal/database"
+	"github.com/rizqynugroho9/filora-dam/api/internal/middleware"
+	"github.com/rizqynugroho9/filora-dam/api/internal/modules/account"
 	"github.com/rizqynugroho9/filora-dam/api/internal/server"
 )
 
@@ -36,7 +39,29 @@ func main() {
 	defer db.Close()
 	log.Info().Msg("database connected")
 
-	app := server.New(server.Deps{Config: cfg, DB: db})
+	// Modules
+	accountRepo := account.NewRepository(db.Pool)
+	accountSvc := account.NewService(accountRepo)
+	accountHandler := account.NewHandler(accountSvc, cfg.ClerkWebhookSigningSecret)
+
+	// Auth: Clerk verifier is optional (nil rejects protected routes gracefully).
+	var clerkVerifier middleware.ClerkVerifier
+	if cfg.ClerkSecretKey != "" {
+		clerkVerifier = clerk.NewVerifier(cfg.ClerkSecretKey)
+	} else {
+		log.Warn().Msg("CLERK_SECRET_KEY not set; protected routes will reject requests")
+	}
+	authMW := middleware.RequireAuth(middleware.AuthDeps{
+		Clerk:    clerkVerifier,
+		Accounts: accountSvc,
+	})
+
+	app := server.New(server.Deps{
+		Config:  cfg,
+		DB:      db,
+		AuthMW:  authMW,
+		Account: accountHandler,
+	})
 
 	go func() {
 		addr := ":" + cfg.Port
