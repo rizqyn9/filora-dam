@@ -83,7 +83,7 @@ make run
 
 - [Architecture](docs/architecture.md) - System architecture and design
 - [API Development Phases](docs/api-development-phases.md) - Development roadmap
-- [Database Design](docs/database.md) - Database schema and principles
+- [Database Design](docs/database/README.md) - Database schema, ERD, rules, and RBAC
 - [AGENTS.md](AGENTS.md) - Development guidelines for all agents
 
 ## Development
