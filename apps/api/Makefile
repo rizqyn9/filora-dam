@@ -1,4 +1,4 @@
-.PHONY: help run build test fmt lint clean migrate-up migrate-down migrate-create sqlc
+.PHONY: help run build test fmt lint clean db-apply db-seed sqlc
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -29,23 +29,19 @@ clean: ## Clean build artifacts
 	@rm -rf bin/
 	@rm -f coverage.out
 
-migrate-up: ## Run database migrations up
+db-apply: ## Apply the canonical schema (manual, no migrations)
 	@test -f .env && export $$(cat .env | grep -v '^#' | xargs) && \
-	migrate -path internal/database/migrations -database "$$DATABASE_URL" up
+	psql "$$DATABASE_URL" -f internal/database/schema.sql
 
-migrate-down: ## Run database migrations down
+db-seed: ## Seed baseline RBAC roles/permissions
 	@test -f .env && export $$(cat .env | grep -v '^#' | xargs) && \
-	migrate -path internal/database/migrations -database "$$DATABASE_URL" down
-
-migrate-create: ## Create a new migration (use: make migrate-create name=create_users)
-	@migrate create -ext sql -dir internal/database/migrations -seq $(name)
+	psql "$$DATABASE_URL" -f internal/database/seed.sql
 
 sqlc: ## Generate sqlc code
 	@sqlc generate
 
 install-tools: ## Install development tools
 	@go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
-	@go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 	@go install github.com/golangci-lint/golangci-lint/cmd/golangci-lint@latest
 
 deps: ## Download dependencies
