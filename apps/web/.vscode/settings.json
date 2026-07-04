@@ -1,0 +1,26 @@
+{
+  // Folder-scoped Oxc settings for the web app. These apply when apps/web is
+  // opened directly OR as a folder in filora.code-workspace (multi-root),
+  // which is the most reliable way to get per-app config in a monorepo.
+  //
+  // configPath stays empty so the local .oxlintrc.json / .oxfmtrc.json are used
+  // via nested-config discovery. Binaries auto-detect from ./node_modules.
+  "oxc.configPath": null,
+  "oxc.fmt.configPath": null,
+  "oxc.enable.oxlint": true,
+  "oxc.enable.oxfmt": true,
+  "oxc.fmt.experimental": true,
+  "oxc.lint.run": "onType",
+
+  "[javascript][javascriptreact][typescript][typescriptreact]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.oxc": "explicit"
+    }
+  },
+  "[json][jsonc]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "editor.formatOnSave": true
+  }
+}
