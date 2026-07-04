@@ -20,6 +20,7 @@ import (
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/gallery"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/rbac"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/session"
+	"github.com/rizqynugroho9/filora-dam/api/internal/modules/storage"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/tag"
 	"github.com/rizqynugroho9/filora-dam/api/internal/server"
 )
@@ -63,6 +64,10 @@ func main() {
 	tagSvc := tag.NewService(tagRepo, authorizer, gallerySvc)
 	tagHandler := tag.NewHandler(tagSvc)
 
+	storageRepo := storage.NewRepository(db.Pool)
+	storageSvc := storage.NewService(storageRepo)
+	storageHandler := storage.NewHandler(storageSvc, authorizer)
+
 	// gallery provisions each user's default gallery on first sync
 	accountSvc.SetProvisioner(gallerySvc)
 	accountHandler := account.NewHandler(accountSvc, cfg.ClerkWebhookSigningSecret)
@@ -98,6 +103,7 @@ func main() {
 		Gallery: galleryHandler,
 		Album:   albumHandler,
 		Tag:     tagHandler,
+		Storage: storageHandler,
 	})
 
 	go func() {
