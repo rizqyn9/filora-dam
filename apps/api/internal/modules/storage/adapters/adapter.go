@@ -1,10 +1,9 @@
 // Package adapters defines the storage provider abstraction. Business logic
 // depends only on StorageAdapter, never on a provider SDK.
 //
-// Phase 6 establishes the contract, credential shapes, validation, and the
-// factory. Concrete cloud calls (Cloudinary/ImageKit/R2/GCS) are implemented
-// where they are first exercised (upload in phase 7, archive in phase 8); until
-// then adapter operations return ErrNotImplemented.
+// Implemented: r2 (Cloudflare R2 / any S3-compatible endpoint) — usable for
+// both the serving and archive layers. Still stubbed (ErrNotImplemented):
+// cloudinary, imagekit, gcs — added when their SDKs + credentials are wired.
 package adapters
 
 import (
@@ -61,6 +60,9 @@ type R2Credentials struct {
 	SecretAccessKey string `json:"secret_access_key"`
 	BucketName      string `json:"bucket_name"`
 	Endpoint        string `json:"endpoint"`
+	// PublicBaseURL is optional: when set, uploaded objects get a public URL of
+	// "<public_base_url>/<key>" (e.g. an R2 public bucket / custom domain).
+	PublicBaseURL string `json:"public_base_url"`
 }
 
 type GCSCredentials struct {
@@ -118,7 +120,7 @@ func NewAdapter(providerType string, raw []byte) (StorageAdapter, error) {
 	case "r2":
 		var c R2Credentials
 		_ = json.Unmarshal(raw, &c)
-		return &r2Adapter{creds: c}, nil
+		return newR2Adapter(c), nil
 	case "gcs":
 		var c GCSCredentials
 		_ = json.Unmarshal(raw, &c)

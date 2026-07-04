@@ -14,18 +14,19 @@ working family DAM quickly, validate it, and keep the code maintainable.
   archive worker, and the dashboard. See
   [implementation-plan.md](../architecture/implementation-plan.md) and
   [apps/api/API.md](../../apps/api/API.md).
-- 🟡 **Storage adapters** are stubbed (`ErrNotImplemented`) — uploads and archive
-  replication are non-functional until a concrete provider SDK + credentials are
-  wired.
+- 🟡 **Storage adapters** — the **R2 (S3-compatible) adapter is implemented** and
+  works for both layers; `cloudinary`/`imagekit`/`gcs` remain stubbed. With an
+  active `r2` storage account configured, uploads and archive replication work
+  end-to-end.
 - 🟡 **Web** app is scaffolded (React 19 + Vite + shadcn).
 - 🔭 **CLI** not started.
 
 ## Remaining before end-to-end
 
-1. Implement at least one real `StorageAdapter` (Cloudinary/ImageKit/R2/GCS) so
-   uploads and archive replication work against live storage.
-2. Configure Clerk (keys + webhook) and a storage account; grant the owner the
-   `superuser` role.
+1. Configure an active `r2` serving account (add `public_base_url` for servable
+   URLs); optionally an `r2`/`gcs` archive account. Additional provider adapters
+   (Cloudinary/ImageKit/GCS) as needed.
+2. Configure Clerk (keys + webhook) and grant the owner the `superuser` role.
 3. Broaden tests (repository/service/workflow against a test database).
 4. Build the web app and CLI against the API.
 

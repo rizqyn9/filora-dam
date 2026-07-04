@@ -5,9 +5,10 @@ current implementation (target design: Clerk auth, RBAC, galleries/albums,
 two-layer storage).
 
 > **Status:** endpoints below are implemented. Physical upload/archive run
-> through the `StorageAdapter` abstraction; concrete provider SDKs
-> (Cloudinary/ImageKit/R2/GCS) are stubbed until credentials + SDK wiring are
-> added, so `POST .../assets` returns an error until a real adapter is configured.
+> through the `StorageAdapter` abstraction. The **R2 (S3-compatible) adapter is
+> functional**; `cloudinary`/`imagekit`/`gcs` are still stubbed. Configure an
+> active `r2` serving account (with `public_base_url` for servable URLs) to make
+> uploads work end-to-end.
 
 ## Base URL
 
