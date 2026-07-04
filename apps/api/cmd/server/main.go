@@ -16,6 +16,7 @@ import (
 	"github.com/rizqynugroho9/filora-dam/api/internal/database"
 	"github.com/rizqynugroho9/filora-dam/api/internal/middleware"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/account"
+	"github.com/rizqynugroho9/filora-dam/api/internal/modules/gallery"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/rbac"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/session"
 	"github.com/rizqynugroho9/filora-dam/api/internal/server"
@@ -45,9 +46,16 @@ func main() {
 	// Modules
 	accountRepo := account.NewRepository(db.Pool)
 	accountSvc := account.NewService(accountRepo)
-	accountHandler := account.NewHandler(accountSvc, cfg.ClerkWebhookSigningSecret)
 
 	authorizer := auth.NewAuthorizer(db.Pool)
+
+	galleryRepo := gallery.NewRepository(db.Pool)
+	gallerySvc := gallery.NewService(galleryRepo, authorizer)
+	galleryHandler := gallery.NewHandler(gallerySvc)
+
+	// gallery provisions each user's default gallery on first sync
+	accountSvc.SetProvisioner(gallerySvc)
+	accountHandler := account.NewHandler(accountSvc, cfg.ClerkWebhookSigningSecret)
 
 	rbacRepo := rbac.NewRepository(db.Pool)
 	rbacSvc := rbac.NewService(rbacRepo)
@@ -77,6 +85,7 @@ func main() {
 		Account: accountHandler,
 		RBAC:    rbacHandler,
 		Session: sessionHandler,
+		Gallery: galleryHandler,
 	})
 
 	go func() {

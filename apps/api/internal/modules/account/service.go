@@ -8,13 +8,25 @@ import (
 	"github.com/rizqynugroho9/filora-dam/api/internal/lib"
 )
 
+// Provisioner sets up per-user resources on first sync (e.g. default gallery).
+// Implemented by the gallery service; injected via SetProvisioner.
+type Provisioner interface {
+	EnsureDefaultGallery(ctx context.Context, userID int64) error
+}
+
 // Service holds user business logic.
 type Service struct {
-	repo *Repository
+	repo        *Repository
+	provisioner Provisioner
 }
 
 func NewService(repo *Repository) *Service {
 	return &Service{repo: repo}
+}
+
+// SetProvisioner wires the per-user provisioning hook (optional).
+func (s *Service) SetProvisioner(p Provisioner) {
+	s.provisioner = p
 }
 
 // GetByID returns a user or a not-found AppError.
@@ -42,7 +54,15 @@ func (s *Service) SyncFromClerk(ctx context.Context, id auth.ClerkIdentity) (*Us
 	if id.Name == "" {
 		id.Name = id.Email
 	}
-	return s.repo.UpsertByClerkID(ctx, id)
+	u, err := s.repo.UpsertByClerkID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if s.provisioner != nil {
+		// Best-effort: ensure the user has a default gallery. Idempotent.
+		_ = s.provisioner.EnsureDefaultGallery(ctx, u.ID)
+	}
+	return u, nil
 }
 
 // UpdateProfile updates the current user's editable fields.

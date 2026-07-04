@@ -11,6 +11,7 @@ import (
 	"github.com/rizqynugroho9/filora-dam/api/internal/database"
 	"github.com/rizqynugroho9/filora-dam/api/internal/lib"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/account"
+	"github.com/rizqynugroho9/filora-dam/api/internal/modules/gallery"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/rbac"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/session"
 )
@@ -24,6 +25,7 @@ type Deps struct {
 	Account *account.Handler
 	RBAC    *rbac.Handler
 	Session *session.Handler
+	Gallery *gallery.Handler
 }
 
 // New builds the Fiber application with global middleware and routes.
