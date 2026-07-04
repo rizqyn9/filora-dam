@@ -3,13 +3,17 @@
 The Go REST API server — the source of all business logic for Filora. The web
 and CLI clients are thin layers over this API.
 
-> **Status.** The **target design** (Clerk auth, RBAC, galleries/albums,
-> two-layer storage) is documented in [`/docs`](../../docs/README.md) and the
-> database is finalized in [`internal/database/schema.sql`](internal/database/schema.sql).
-> The **code in this app is still the earlier (legacy) implementation** (JWT +
-> password auth, per-user assets, single-layer storage) and is being migrated.
-> Where this README describes current code, it is marked _legacy_. See the
-> [roadmap](../../docs/product/roadmap.md) for the gap and plan.
+> **Status — rebuild in progress.** The legacy implementation (JWT/password auth,
+> per-user assets, single-layer storage) has been **removed** to make way for a
+> fresh implementation of the **target design** (Clerk auth, RBAC, galleries/
+> albums, two-layer storage). What remains is the finalized database design plus
+> neutral infrastructure; the modules, config, auth, and HTTP layer are being
+> rebuilt from scratch. See the [roadmap](../../docs/product/roadmap.md).
+>
+> Note: the API will not build until the entry point and modules are rebuilt.
+> The legacy [`API.md`](API.md) / [`TESTING.md`](TESTING.md) /
+> [`TESTING_MANUAL.md`](TESTING_MANUAL.md) are kept (banner-marked) for reference
+> and will be rewritten alongside the new implementation.
 
 ## Tech Stack
 
@@ -61,24 +65,33 @@ make clean           # Remove build artifacts
 
 ## Project Structure
 
+Current state after removing the legacy implementation — kept: the database
+design plus neutral infrastructure. The rest is to be rebuilt.
+
 ```
 apps/api/
-├── cmd/server/main.go            # Entry point
 ├── internal/
-│   ├── config/                   # Environment configuration (validator v10)
 │   ├── database/
 │   │   ├── schema.sql            # Canonical schema (source of truth, manual apply)
 │   │   ├── seed.sql              # Baseline RBAC roles/permissions
-│   │   ├── db.go                 # pgx connection pool
-│   │   ├── db/                   # sqlc-generated code
-│   │   └── queries/              # SQL queries for sqlc
-│   ├── lib/                      # Shared helpers (response, hashing, mime, …)
-│   ├── middleware/               # Auth middleware
-│   └── modules/                  # Feature modules (vertical slice)
+│   │   └── db.go                 # pgx connection pool
+│   └── lib/                      # Neutral helpers: response.go, hash.go, mime.go
 ├── API.md                        # API reference (legacy — see banner)
 ├── sqlc.yaml
 ├── Makefile
 ├── go.mod / go.sum
+```
+
+Target layout to rebuild (see [architecture overview](../../docs/architecture/overview.md)):
+
+```
+apps/api/
+├── cmd/server/main.go            # Entry point
+└── internal/
+    ├── config/                   # Environment configuration (validator v10)
+    ├── database/queries/         # SQL queries for sqlc → internal/database/db/ (generated)
+    ├── middleware/               # Clerk + CLI token auth
+    └── modules/                  # Feature modules (vertical slice)
 ```
 
 ### Module structure (vertical slice)
@@ -93,11 +106,9 @@ internal/modules/<module>/
 └── models.go        # Data structures
 ```
 
-_Legacy modules present today:_ `account`, `asset`, `storage` (+ `adapters/`),
-`dashboard`.
-_Planned (target):_ add `rbac`, `session`, `gallery`, `album`, `tag`; rework
-`account` for Clerk and `storage` for two layers. See
-[architecture overview](../../docs/architecture/overview.md).
+_Planned modules (target):_ `account` (Clerk users), `rbac` (roles/permissions),
+`session` (CLI tokens), `gallery`, `album`, `tag`, `asset`, `storage`
+(providers + adapters + two-layer orchestration), `dashboard`.
 
 ### Adding a feature (database-first)
 
