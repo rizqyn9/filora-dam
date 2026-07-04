@@ -1,123 +1,103 @@
 # Filora DAM
 
-Multi-cloud Digital Asset Management and backup platform.
+Private, family-scale, multi-cloud Digital Asset Management (DAM) platform.
+
+Upload and organize photos, videos, and documents in **galleries** and **albums**.
+Filora spreads files across multiple free-tier cloud accounts and keeps a cheap
+**archive copy** — while hiding all of that storage complexity from the user.
+
+> New here? Start with the [documentation index](docs/README.md) →
+> [Product overview](docs/product/overview.md).
 
 ## Project Structure
 
 ```
 filora-dam/
 ├── apps/
-│   ├── api/          # Go REST API server
-│   ├── cli/          # Go CLI client (coming soon)
-│   └── web/          # React 19 frontend (coming soon)
-├── docs/             # Documentation
-├── AGENTS.md         # Development guidelines
-└── CLAUDE.md         # AI agent instructions
+│   ├── api/          # Go REST API server (all business logic)
+│   ├── cli/          # Go CLI client (planned)
+│   └── web/          # React 19 frontend
+├── docs/             # Documentation (product, architecture, database)
+├── AGENTS.md         # Engineering rules for all contributors/agents
+└── CLAUDE.md         # Points AI agents at AGENTS.md
 ```
 
 ## Applications
 
-### API (Backend)
+| App | Stack | Status |
+|-----|-------|--------|
+| **API** ([README](apps/api/README.md)) | Go, Fiber v3, sqlc, PostgreSQL (Neon) | Legacy impl; redesign in progress |
+| **Web** ([README](apps/web/README.md)) | React 19, TypeScript, TanStack Query/Router, Tailwind v4, shadcn/ui, Zod | Scaffolded |
+| **CLI** | Go, Cobra | Planned |
 
-Go REST API server with all business logic.
+## Features (target design)
 
-**Tech Stack**: Go, Fiber v3, sqlc, PostgreSQL
+- Multi-cloud storage pooled across many accounts (Cloudinary, ImageKit, R2, GCS)
+- **Two storage layers**: serving (hot) + archive (cheap backup) — every asset in both
+- Galleries, albums, and normalized tagging
+- Sharing via email **invitations** with `owner`/`editor`/`viewer` roles
+- **RBAC** (superuser/admin/member/viewer) with Clerk-based web auth
+- Terminal (CLI) login with **multiple concurrent sessions**
+- Per-gallery quota, per-gallery deduplication, soft-delete (trash)
 
-[View API README](apps/api/README.md)
+See the [feature catalog](docs/product/features.md) for status of each item.
 
-### CLI (Coming Soon)
+## Documentation
 
-Command-line client for interacting with the API.
-
-**Tech Stack**: Go, Cobra
-
-### Web (Coming Soon)
-
-React frontend for managing digital assets.
-
-**Tech Stack**: React 19, TypeScript, TanStack Query/Router, Tailwind CSS v4
-
-## Features
-
-- Multi-cloud storage (Cloudinary, ImageKit, Cloudflare R2)
-- Asset metadata management
-- Automatic storage orchestration
-- Deduplication
-- Storage quota management
-- Search and filtering
-- Tags and organization
-- Backup support (planned)
+- [Documentation index](docs/README.md) — start here
+- [Product](docs/product/README.md) — overview, concepts, features, roles, roadmap
+- [Architecture](docs/architecture/README.md) — apps, flows, storage, auth
+- [Database](docs/database/README.md) — schema, ERD, rules, RBAC
+- [AGENTS.md](AGENTS.md) — engineering rules for all contributors
 
 ## Getting Started
 
 ### Prerequisites
 
 - Go 1.23+
-- PostgreSQL database
-- Node.js 20+ (for web app)
+- A PostgreSQL database (Neon recommended)
+- Node.js 20+ / Bun (for the web app)
+- A [Clerk](https://clerk.com) application (web auth)
 
-### Quick Start
-
-1. **Clone the repository**
-
-```bash
-git clone https://github.com/rizqynugroho9/filora-dam.git
-cd filora-dam
-```
-
-2. **Set up API**
+### Quick start (API + database)
 
 ```bash
-cd apps/api
-cp .env.example .env
-# Edit .env with your configuration
-go mod download
-make run
+git clone https://github.com/rizqyn9/filora-dam.git
+cd filora-dam/apps/api
+
+cp .env.example .env          # set DATABASE_URL + Clerk keys
+make db-apply                 # apply schema.sql to your database (no migrations)
+make db-seed                  # seed baseline roles/permissions
+make run                      # start the API
 ```
 
-3. **Set up CLI** (coming soon)
+> Filora uses a **manual schema** (`internal/database/schema.sql`) applied with
+> `psql` — there is no migration tool. See [database rules](docs/database/rules.md#applying-the-schema).
 
-4. **Set up Web** (coming soon)
+## Development philosophy
 
-## Documentation
+**Core principles**
 
-- [Database Design](docs/database/README.md) - Database schema, ERD, rules, and RBAC
-- [AGENTS.md](AGENTS.md) - Development guidelines for all agents
+1. **Build first** — working software over perfect architecture.
+2. **Refactor later** — no abstractions until 2+ concrete cases exist.
+3. **Database first** — schema → queries → repository → service → handler → UI.
+4. **Consistency first** — follow existing patterns.
 
-## Development
+**Tech philosophy**
 
-This project is developed using AI-assisted coding tools (Claude Code, Kiro, Antigravity).
+- **API first** — all business logic in the API.
+- **Thin clients** — CLI and web only handle presentation.
+- **Storage abstraction** — providers are implementation details.
+- **Database as truth** — PostgreSQL is the source of truth.
 
-All agents must follow the guidelines in [AGENTS.md](AGENTS.md).
+All contributors (human and AI) must follow [AGENTS.md](AGENTS.md).
 
-### Core Principles
+## Status
 
-1. **Build First** - Working software over perfect architecture
-2. **Refactor Later** - No abstractions until 2+ implementations exist
-3. **Database First** - Schema → Repository → Service → API → UI
-4. **Consistency First** - Follow existing patterns
-
-### Tech Philosophy
-
-- **API First** - All business logic in API
-- **Thin Clients** - CLI and Web only handle presentation
-- **Storage Abstraction** - Providers are implementation details
-- **Database as Truth** - PostgreSQL is the source of truth
-
-## Current Status
-
-- [x] Project structure
-- [x] API Phase 0: Project setup complete
-- [x] Documentation
-- [ ] API Phase 1: Core infrastructure (in progress)
-- [ ] API Phase 2-12: Feature development
-- [ ] CLI development
-- [ ] Web development
+MVP / design stage. The database design is complete; the API is being migrated
+from its legacy implementation to the target design. See the
+[roadmap](docs/product/roadmap.md).
 
 ## License
 
-Private project - All rights reserved
-
-## Support
-
-For issues or questions, see [AGENTS.md](AGENTS.md) for development guidelines.
+Private project — all rights reserved.

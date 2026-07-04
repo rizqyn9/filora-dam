@@ -1,5 +1,10 @@
 # Manual Testing Guide for Filora API
 
+> ⚠️ **Legacy.** These scenarios target the **current (legacy) API**
+> (register/login with passwords, per-user assets). They do not reflect the
+> target design in [`/docs`](../../docs/README.md). See the
+> [roadmap](../../docs/product/roadmap.md).
+
 This guide provides manual test scenarios to verify API functionality.
 
 ## Setup

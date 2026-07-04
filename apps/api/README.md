@@ -1,312 +1,139 @@
 # Filora DAM API
 
-A high-performance, production-ready REST API for Digital Asset Management built with Go.
+The Go REST API server — the source of all business logic for Filora. The web
+and CLI clients are thin layers over this API.
 
-**Status:** MVP Complete ✅ (Phases 0-11)
-
-## Key Features
-
-- 🔐 **JWT Authentication** - Secure user registration and login with bcrypt password hashing
-- ☁️ **Multi-Cloud Storage** - Support for Cloudinary, ImageKit, Cloudflare R2
-- 📦 **Deduplication** - SHA-256 hash-based file deduplication per user
-- 💾 **Quota Management** - Configurable per-user storage quotas (default 5GB)
-- 🔍 **Search & Filtering** - Find assets by name or filter by type
-- 📊 **Dashboard** - Real-time statistics and recent activity tracking
-- 🚀 **Type-Safe** - sqlc for compile-time SQL verification
-- 📝 **Well Documented** - Comprehensive API documentation with examples
+> **Status.** The **target design** (Clerk auth, RBAC, galleries/albums,
+> two-layer storage) is documented in [`/docs`](../../docs/README.md) and the
+> database is finalized in [`internal/database/schema.sql`](internal/database/schema.sql).
+> The **code in this app is still the earlier (legacy) implementation** (JWT +
+> password auth, per-user assets, single-layer storage) and is being migrated.
+> Where this README describes current code, it is marked _legacy_. See the
+> [roadmap](../../docs/product/roadmap.md) for the gap and plan.
 
 ## Tech Stack
 
-- **Go** 1.23+ 
-- **Fiber v3** - Lightweight web framework
-- **PostgreSQL** - Persistent data storage
-- **sqlc** - Type-safe SQL code generation
-- **pgx/v5** - High-performance PostgreSQL driver
-- **JWT** - Token-based authentication
-- **bcrypt** - Secure password hashing
+- **Go** 1.23+, **Fiber v3** (web framework)
+- **PostgreSQL** (Neon) via **pgx/v5**
+- **sqlc** — type-safe SQL codegen
+- **validator v10** — input validation
+- **Clerk** — web auth _(target; legacy code uses JWT/bcrypt)_
 
 ## Prerequisites
 
 - Go 1.23+
-- PostgreSQL 14+
-- Git
+- A PostgreSQL database (Neon recommended)
+- `psql` (to apply the schema) and `sqlc` (to regenerate query code)
 
 ## Quick Start
 
-### 1. Clone and setup
-
 ```bash
-git clone <repo-url>
-cd filora-dam/apps/api
+cd apps/api
+cp .env.example .env         # set DATABASE_URL (+ Clerk keys for target)
 go mod download
+
+make db-apply                # apply internal/database/schema.sql
+make db-seed                 # seed baseline roles/permissions
+make run                     # start the server
 ```
 
-### 2. Environment configuration
+Health check: `curl http://localhost:$PORT/health`
+
+> **No migrations.** The schema is a single canonical file applied manually with
+> `psql`; there is no `migrate` tool. See
+> [database rules](../../docs/database/rules.md#applying-the-schema).
+
+## Commands
 
 ```bash
-cp .env.example .env
-```
-
-Update `.env`:
-```bash
-PORT=9000
-DATABASE_URL=postgres://user:pass@localhost/filora
-JWT_SECRET=your-32-character-minimum-secret-key
-ENVIRONMENT=development
-```
-
-### 3. Database setup
-
-```bash
-createdb filora
-make migrate-up
-```
-
-### 4. Run the server
-
-```bash
-make run
-```
-
-Server starts on `http://localhost:9000`
-
-Test: `curl http://localhost:9000/health`
-
-## Available Commands
-
-```bash
-make run               # Run development server
-make build             # Build production binary
-make test              # Run tests
-make fmt               # Format code with gofmt
-make lint              # Run linter (golangci-lint)
-make migrate-up        # Run database migrations
-make migrate-down      # Rollback database
-make sqlc              # Generate sqlc code from queries
-make deps              # Update dependencies
+make run             # Run the server
+make build           # Build the binary
+make test            # Run tests
+make test-coverage   # Tests with HTML coverage
+make fmt             # Format code (gofmt)
+make lint            # Run golangci-lint
+make db-apply        # Apply schema.sql to $DATABASE_URL
+make db-seed         # Seed baseline RBAC roles/permissions
+make sqlc            # Regenerate sqlc code from queries
+make deps            # go mod download && tidy
+make clean           # Remove build artifacts
 ```
 
 ## Project Structure
 
 ```
 apps/api/
-├── cmd/server/
-│   └── main.go                  # Entry point (28 endpoints registered)
+├── cmd/server/main.go            # Entry point
 ├── internal/
-│   ├── config/
-│   │   └── config.go            # Environment configuration
+│   ├── config/                   # Environment configuration (validator v10)
 │   ├── database/
-│   │   ├── db.go                # PostgreSQL connection pool
-│   │   ├── migrations/          # Database schema (sqlc)
-│   │   └── queries/             # SQL queries for sqlc
-│   ├── lib/
-│   │   ├── response.go          # HTTP response helpers
-│   │   ├── jwt.go               # JWT token management (24h)
-│   │   ├── password.go          # bcrypt password hashing
-│   │   ├── hash.go              # SHA-256 file hashing
-│   │   └── mime.go              # MIME type detection
-│   ├── middleware/
-│   │   └── auth.go              # JWT middleware
-│   └── modules/                 # Feature modules (vertical slice)
-│       ├── account/             # User auth/registration
-│       ├── asset/               # Asset metadata management
-│       ├── storage/             # Storage provider management
-│       │   └── adapters/        # Cloudinary, ImageKit, R2
-│       └── dashboard/           # Statistics & metrics
-├── API.md                       # Complete API documentation
-├── README.md                    # This file
-├── TESTING.md                   # Testing strategy
-├── TESTING_MANUAL.md            # Manual test examples
-├── Makefile
+│   │   ├── schema.sql            # Canonical schema (source of truth, manual apply)
+│   │   ├── seed.sql              # Baseline RBAC roles/permissions
+│   │   ├── db.go                 # pgx connection pool
+│   │   ├── db/                   # sqlc-generated code
+│   │   └── queries/              # SQL queries for sqlc
+│   ├── lib/                      # Shared helpers (response, hashing, mime, …)
+│   ├── middleware/               # Auth middleware
+│   └── modules/                  # Feature modules (vertical slice)
+├── API.md                        # API reference (legacy — see banner)
 ├── sqlc.yaml
-├── go.mod
-└── go.sum
+├── Makefile
+├── go.mod / go.sum
 ```
 
-## Complete API
+### Module structure (vertical slice)
 
-See [API.md](API.md) for comprehensive documentation.
+Each feature module owns its full stack:
 
-**Quick Summary:**
-- `POST /auth/register` - Create account
-- `POST /auth/login` - Get JWT token
-- `POST /storage/upload` - Upload file
-- `GET /storage/download/:id` - Download file
-- `GET /assets` - List assets
-- `GET /assets/search?q=...` - Search by name
-- `GET /assets/filter/:type` - Filter by type
-- `GET /dashboard/` - View statistics
-
-**28 total endpoints** across 5 modules.
-
-## Testing
-
-Tests available for core utilities (100% coverage):
-
-```bash
-# Run all tests
-go test ./...
-
-# Run with verbose output
-go test -v ./...
-
-# Run lib tests only (passing ✅)
-go test -v ./internal/lib
-
-# View coverage
-go test -cover ./...
 ```
-
-**Current Coverage:**
-- Password hashing/verification: ✅
-- JWT token management: ✅
-- File hashing (SHA-256): ✅
-
-See [TESTING.md](TESTING.md) for strategy and [TESTING_MANUAL.md](TESTING_MANUAL.md) for curl examples.
-
-## Manual Testing
-
-Test all endpoints with provided curl examples:
-
-```bash
-# Start server
-make run
-
-# In another terminal
-bash test_api.sh  # See TESTING_MANUAL.md for setup
-```
-
-## Examples
-
-### Upload and Download
-```bash
-# Get token
-TOKEN=$(curl -X POST http://localhost:9000/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"u@example.com","name":"User","password":"pass123456"}' \
-  | jq -r '.data.token')
-
-# Create provider
-curl -X POST http://localhost:9000/api/v1/storage/providers \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"My Cloud","type":"cloudinary","credentials":{...}}'
-
-# Upload
-ASSET_ID=$(curl -X POST http://localhost:9000/api/v1/storage/upload \
-  -H "Authorization: Bearer $TOKEN" \
-  -F "file=@photo.jpg" | jq -r '.data.id')
-
-# Download
-curl http://localhost:9000/api/v1/storage/download/$ASSET_ID \
-  -H "Authorization: Bearer $TOKEN" -o downloaded.jpg
-```
-
-See [TESTING_MANUAL.md](TESTING_MANUAL.md) for 17 complete endpoint examples.
-
-## Development
-
-### Module Structure (Vertical Slice)
-
-Each module owns its layer stack:
-```
-internal/modules/{module}/
-├── handler.go       # HTTP routes
-├── service.go       # Business logic
-├── repository.go    # Database access
+internal/modules/<module>/
+├── handler.go       # HTTP routes: validate, call service, format response
+├── service.go       # Business logic, orchestration, permission checks
+├── repository.go    # Database access (sqlc)
 └── models.go        # Data structures
 ```
 
-### Adding a new feature
+_Legacy modules present today:_ `account`, `asset`, `storage` (+ `adapters/`),
+`dashboard`.
+_Planned (target):_ add `rbac`, `session`, `gallery`, `album`, `tag`; rework
+`account` for Clerk and `storage` for two layers. See
+[architecture overview](../../docs/architecture/overview.md).
 
-1. **Database first** - Create migration
-2. **SQL queries** - Write in `queries/*.sql`
-3. **Repository** - Implement database access
-4. **Service** - Add business logic
-5. **Handler** - Create HTTP endpoints
-6. **Tests** - Add unit tests
+### Adding a feature (database-first)
 
-### Generate sqlc code
-
-After modifying SQL queries:
-```bash
-make sqlc
-```
+1. Update `internal/database/schema.sql`.
+2. Write/adjust queries in `internal/database/queries/*.sql`.
+3. `make sqlc` to regenerate typed code.
+4. Implement repository → service → handler.
+5. Add tests.
 
 ## Environment Variables
 
-**Required:**
-```
-PORT=9000                          # Server port
-DATABASE_URL=postgres://user:pass@localhost/filora
-JWT_SECRET=min-32-characters-secret
-ENVIRONMENT=development            # or production
-```
+Target (see [`.env.example`](.env.example)):
 
-**Optional (Storage Providers):**
 ```
-# Cloudinary
-CLOUDINARY_CLOUD_NAME=...
-CLOUDINARY_API_KEY=...
-CLOUDINARY_API_SECRET=...
-
-# ImageKit
-IMAGEKIT_PUBLIC_KEY=...
-IMAGEKIT_PRIVATE_KEY=...
-IMAGEKIT_URL_ENDPOINT=...
-
-# R2
-R2_ACCOUNT_ID=...
-R2_ACCESS_KEY_ID=...
-R2_SECRET_ACCESS_KEY=...
-R2_BUCKET_NAME=...
-R2_ENDPOINT=...
+PORT=3000
+ENV=development
+DATABASE_URL=postgres://user:pass@host/filora
+CLERK_SECRET_KEY=...
+CLERK_WEBHOOK_SIGNING_SECRET=...
+CLI_TOKEN_TTL_HOURS=720
 ```
 
-## Performance
+Storage provider credentials are stored **per account in the database**
+(`storage_providers.credentials`), not in env.
 
-- **Connection Pooling**: pgx with 25 default pool size
-- **Query Optimization**: Indexes on user_id, hash, type, created_at
-- **Deduplication**: Saves storage via hash-based detection
-- **Streaming**: Direct download from provider (low memory)
-- **Caching**: JWT validation without DB lookup
+> _Legacy note:_ the current code still expects a `JWT_SECRET` and per-provider
+> env vars until the Clerk + DB-managed-account migration lands.
 
-## Security
+## Documentation
 
-✅ Implemented:
-- JWT authentication (HS256, 24h expiration)
-- Bcrypt password hashing (cost 10)
-- User isolation (all queries filtered by user_id)
-- Authorization checks (ownership verification)
-- CORS support
-- Input validation (struct tags)
-- SQL injection prevention (prepared statements)
-
-## Troubleshooting
-
-**Connection refused**
-```bash
-# Verify PostgreSQL is running
-psql -U postgres -d filora
-```
-
-**JWT expired**
-- Tokens expire after 24 hours, login again
-
-**Provider credentials error**
-- Check provider configuration in .env
-- Verify API credentials are correct
-
-## Architecture & Design
-
-See [../../docs/architecture.md](../../docs/architecture.md) for:
-- System design
-- Database schema
-- API design principles
-- Deployment architecture
-
-See [../../AGENTS.md](../../AGENTS.md) for development guidelines and coding standards.
+- [Docs index](../../docs/README.md)
+- [Architecture](../../docs/architecture/README.md) · [Auth](../../docs/architecture/auth.md) · [Storage](../../docs/architecture/storage.md)
+- [Database](../../docs/database/README.md)
+- [API reference](API.md) _(legacy)_
+- [Engineering rules](../../AGENTS.md)
 
 ## License
 
-Proprietary - Filora Digital Asset Management Platform
+Proprietary — Filora Digital Asset Management Platform.

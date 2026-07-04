@@ -1,5 +1,10 @@
 # Filora API Testing Documentation
 
+> ⚠️ **Legacy.** Describes tests for the **current (legacy) API implementation**.
+> The target design (Clerk auth, RBAC, galleries/albums, two-layer storage) is in
+> [`/docs`](../../docs/README.md); testing will be revised during the
+> [migration](../../docs/product/roadmap.md).
+
 This document describes the testing strategy and coverage for the Filora DAM API.
 
 ## Test Coverage

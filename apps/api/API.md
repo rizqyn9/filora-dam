@@ -1,5 +1,12 @@
 # Filora DAM API Documentation
 
+> ⚠️ **Legacy.** This documents the **current (legacy) API implementation**
+> (JWT + password auth, per-user assets, single-layer storage). It does **not**
+> reflect the target design (Clerk auth, RBAC, galleries/albums, two-layer
+> storage). For the target, see [`/docs`](../../docs/README.md); for the gap and
+> migration plan, see the [roadmap](../../docs/product/roadmap.md). Update this
+> file when the API is rebuilt.
+
 Complete REST API reference for Filora Digital Asset Management platform.
 
 ## Base URL

@@ -16,7 +16,10 @@ All agents must follow the same architecture, conventions, and development philo
 
 Before making changes, read:
 
-1. docs/database/README.md
+1. docs/README.md (documentation index)
+2. docs/product/overview.md
+3. docs/architecture/overview.md
+4. docs/database/README.md
 
 ---
 
