@@ -26,9 +26,9 @@ filora-dam/
 
 | App | Stack | Status |
 |-----|-------|--------|
-| **API** ([README](apps/api/README.md)) | Go, Fiber v3, sqlc, PostgreSQL (Neon) | Legacy impl; redesign in progress |
+| **API** ([README](apps/api/README.md)) | Go, Fiber v3, sqlc, PostgreSQL (Neon) | Phases 0–10 implemented; R2 adapter live |
 | **Web** ([README](apps/web/README.md)) | React 19, TypeScript, TanStack Query/Router, Tailwind v4, shadcn/ui, Zod | Scaffolded |
-| **CLI** | Go, Cobra | Planned |
+| **CLI** ([README](apps/cli/README.md)) | Go, Cobra | Basic client (login, sessions, galleries, upload/list/download) |
 
 ## Features (target design)
 

@@ -19,7 +19,8 @@ working family DAM quickly, validate it, and keep the code maintainable.
   active `r2` storage account configured, uploads and archive replication work
   end-to-end.
 - 🟡 **Web** app is scaffolded (React 19 + Vite + shadcn).
-- 🔭 **CLI** not started.
+- 🟡 **CLI** (Go + Cobra): basic client implemented — login (CLI tokens),
+  sessions, galleries, upload/list/download.
 
 ## Remaining before end-to-end
 
