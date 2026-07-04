@@ -1,4 +1,4 @@
-.PHONY: help run build test fmt lint clean db-apply db-seed sqlc
+.PHONY: help run run-worker build test fmt lint clean db-apply db-seed sqlc
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -9,8 +9,12 @@ help: ## Show this help message
 run: ## Run the server
 	@go run cmd/server/main.go
 
-build: ## Build the binary
+run-worker: ## Run the archive worker
+	@go run cmd/worker/main.go
+
+build: ## Build the binaries (server + worker)
 	@go build -o bin/server cmd/server/main.go
+	@go build -o bin/worker cmd/worker/main.go
 
 test: ## Run tests
 	@go test -v ./...

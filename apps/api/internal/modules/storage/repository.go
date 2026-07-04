@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/rizqynugroho9/filora-dam/api/internal/database/db"
@@ -126,6 +128,46 @@ func (r *Repository) GetServingURL(ctx context.Context, assetID uuid.UUID) (stri
 
 func (r *Repository) EnqueueArchive(ctx context.Context, assetID uuid.UUID) error {
 	return r.q.EnqueueArchiveJob(ctx, assetID)
+}
+
+// --- archive worker ---
+
+func (r *Repository) ClaimArchiveJob(ctx context.Context) (db.ArchiveSyncJob, bool, error) {
+	job, err := r.q.ClaimArchiveJob(ctx)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return db.ArchiveSyncJob{}, false, nil
+	}
+	if err != nil {
+		return db.ArchiveSyncJob{}, false, err
+	}
+	return job, true, nil
+}
+
+func (r *Repository) MarkJobResult(ctx context.Context, id int64, status string, lastErr *string, nextRetry *time.Time) error {
+	return r.q.MarkArchiveJobResult(ctx, db.MarkArchiveJobResultParams{
+		ID:          id,
+		Status:      db.JobStatus(status),
+		LastError:   lastErr,
+		NextRetryAt: tsFromPtr(nextRetry),
+	})
+}
+
+func (r *Repository) GetArchiveSource(ctx context.Context, assetID uuid.UUID) (db.GetArchiveSourceRow, bool, error) {
+	row, err := r.q.GetArchiveSource(ctx, assetID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return db.GetArchiveSourceRow{}, false, nil
+	}
+	if err != nil {
+		return db.GetArchiveSourceRow{}, false, err
+	}
+	return row, true, nil
+}
+
+func tsFromPtr(t *time.Time) pgtype.Timestamptz {
+	if t == nil {
+		return pgtype.Timestamptz{}
+	}
+	return pgtype.Timestamptz{Time: *t, Valid: true}
 }
 
 func (r *Repository) Usage(ctx context.Context) ([]AccountUsage, error) {
