@@ -1,269 +1,54 @@
 # Filora Agent Operating Manual
 
-Read this document before performing any task.
-
-This repository is developed using multiple AI coding agents:
-
-* Claude Code
-* Kiro
-* Antigravity
-
-All agents must follow the same architecture, conventions, and development philosophy.
-
----
-
-# Required Reading Order
-
-Before making changes, read:
-
-1. docs/README.md (documentation index)
-2. docs/product/overview.md
-3. docs/architecture/overview.md
-4. docs/database/README.md
-
----
-
-# Project Overview
-
-Filora is a multi-cloud Digital Asset Management (DAM) platform.
-
-Users upload, organize, synchronize, and manage digital assets.
-
-Storage complexity is abstracted from users.
-
-Users never need to know:
-
-* where files are stored
-* which storage provider is used
-* which account stores their files
-
-Filora manages storage automatically.
-
----
-
-# Project Stage
-
-Current Stage: MVP
-
-Filora is a solo-developed project.
-
-Primary goals:
-
-1. Ship working features quickly
-2. Validate product-market fit
-3. Keep code maintainable
-4. Minimize operational complexity
-
-Do not optimize for hypothetical future requirements.
-
----
-
-# Technology Stack
-
-## API & CLI (Backend)
-
-* Go 1.23+
-* Fiber v3 (Web Framework)
-* sqlc (Type-safe SQL)
-* PostgreSQL (Neon)
-* validator v10 (Input validation)
-* golang-migrate (Database migrations)
-
-## Web (Frontend)
-
-* React 19
-* TypeScript
-* TanStack Query (Data fetching)
-* TanStack Router (Routing)
-* Tailwind CSS v4
-* Shadcn UI
-* Zod v4
-
-## Storage Providers
-
-* Cloudinary
-* ImageKit
-* Cloudflare R2
-
-## Backup Storage (Planned)
-
-* Alibaba OSS Archive
-* Google Cloud Storage Archive (alternative)
-
----
-
-# Project Structure
-
-Filora consists of three independent applications:
-
-```
-filora-dam/
-├── apps/
-│   ├── api/          # Go REST API server
-│   ├── cli/          # Go CLI client (HTTP client)
-│   └── web/          # React 19 frontend
-├── AGENTS.md
-├── CLAUDE.md
-└── docs/
-```
-
-No shared packages between apps.
-
-Each app is independent.
-
----
-
-# API Architecture
-
-API uses modular vertical slice architecture.
-
-Each module owns:
-
-* handler (HTTP routes)
-* service (business logic)
-* repository (database access)
-* models (data structures)
-
-Example structure:
-
-```
-apps/api/
-├── cmd/
-│   └── server/
-│       └── main.go
-├── internal/
-│   ├── modules/
-│   │   ├── asset/
-│   │   │   ├── handler.go
-│   │   │   ├── service.go
-│   │   │   ├── repository.go
-│   │   │   └── models.go
-│   │   ├── storage/
-│   │   │   ├── handler.go
-│   │   │   ├── service.go
-│   │   │   ├── repository.go
-│   │   │   ├── models.go
-│   │   │   └── adapters/
-│   │   │       ├── adapter.go
-│   │   │       ├── cloudinary.go
-│   │   │       ├── imagekit.go
-│   │   │       └── r2.go
-│   │   └── account/
-│   │       ├── handler.go
-│   │       ├── service.go
-│   │       ├── repository.go
-│   │       └── models.go
-│   ├── database/
-│   │   ├── db.go
-│   │   ├── migrations/
-│   │   └── queries/
-│   ├── config/
-│   │   └── config.go
-│   └── lib/
-│       └── response.go
-├── go.mod
-└── go.sum
-```
-
-Avoid layer-first architecture.
-
----
-
-# CLI Architecture
-
-CLI is a thin HTTP client.
-
-CLI communicates with API via REST.
-
-CLI does not contain business logic.
-
-```
-apps/cli/
-├── cmd/
-│   └── filora/
-│       └── main.go
-├── internal/
-│   ├── client/
-│   │   └── api_client.go
-│   └── commands/
-│       ├── upload.go
-│       ├── download.go
-│       ├── list.go
-│       └── delete.go
-├── go.mod
-└── go.sum
-```
-
----
-
-# Decision Hierarchy
-
-When making technical decisions prioritize:
-
-1. Correctness
-2. Simplicity
-3. Readability
-4. Developer Experience
-5. Performance
-6. Extensibility
-
-Do not sacrifice simplicity for theoretical flexibility.
-
----
-
-# Golden Rules
-
-## Build First
-
-Working software is more important than perfect architecture.
-
----
-
-## Refactor Later
-
-Do not introduce abstractions until at least two concrete implementations exist.
-
-Duplication is acceptable.
-
-Incorrect abstractions are expensive.
-
----
-
-## Database First
-
-Design order:
-
-1. Database schema (SQL migration)
-2. sqlc queries
-3. Repository
-4. Service
-5. Handler (API)
-6. UI
-
----
-
-## Consistency First
-
-Follow existing project patterns.
-
-Do not introduce personal architectural preferences.
-
----
-
-# Storage Rules
-
-Storage providers are implementation details.
-
-Business logic must never directly depend on:
-
-* Cloudinary SDK
-* ImageKit SDK
-* R2 SDK
-
-Only storage adapters may communicate with providers.
-
-All adapters implement StorageAdapter interface:
-
+Read this before any task. All AI agents (Claude Code, Kiro, Antigravity) follow
+the same rules here.
+
+## Required reading (before changing code)
+1. `docs/README.md` — documentation index
+2. `docs/product/overview.md` — what Filora is
+3. `docs/architecture/overview.md` + `docs/architecture/project-structure.md` — how it fits together (dir trees, module anatomy, dependency rules live here)
+4. `docs/database/README.md` — schema is the source of truth for data
+
+## Project
+Filora is a multi-cloud Digital Asset Management (DAM) platform. Users upload,
+organize, sync, and manage digital assets. Storage complexity is fully abstracted
+— users never know where/how/which account stores their files. Filora manages it.
+
+**Stage: MVP, solo-developed.** Goals: ship working features fast, validate PMF,
+stay maintainable, minimize ops. Do NOT optimize for hypothetical future needs.
+
+## Tech stack
+- **API** (`apps/api`): Go 1.23+, Fiber v3, sqlc, PostgreSQL (Neon), validator v10, golang-migrate
+- **CLI** (`apps/cli`): Go — thin HTTP client, no business logic
+- **Web** (`apps/web`): React 19, TypeScript, TanStack Query + Router, Tailwind v4, Shadcn UI, Zod v4, bun
+- **Storage providers**: Cloudinary, ImageKit, Cloudflare R2. **Backup (planned)**: Alibaba OSS / GCS Archive
+
+Three independent apps under `apps/`. No shared packages — each app is independent.
+
+## Architecture (see docs/architecture/project-structure.md for the full blueprint)
+- API uses **modular vertical-slice** architecture. Each module owns its full stack: `handler.go` (HTTP), `service.go` (business logic), `repository.go` (DB via sqlc), `models.go` (DTOs/structs), optional `routes.go`. Modules live in `internal/modules/<name>/`. Avoid layer-first layout.
+- Cross-module needs use **consumer-defined interfaces**, injected at the compose root (`cmd/server/main.go`). No DI container.
+- CLI is a thin REST client: `cmd/`, `internal/client/`, `internal/commands/`. No business logic.
+
+## Decision hierarchy
+Correctness > Simplicity > Readability > Developer Experience > Performance > Extensibility.
+Never sacrifice simplicity for theoretical flexibility.
+
+## Golden rules
+- **Build first** — working software beats perfect architecture.
+- **Refactor later** — no abstraction until ≥2 concrete implementations exist. Duplication is acceptable; wrong abstractions are expensive.
+- **Database first** — design order: SQL migration → sqlc queries → repository → service → handler → UI.
+- **Consistency first** — follow existing patterns; no personal architectural preferences.
+
+## Layer responsibilities
+- **Handler**: validate request, call service, return response. Stay thin — no business logic, no DB.
+- **Service**: business rules, orchestration, workflows, authz checks. No Fiber, no direct DB.
+- **Repository**: DB access/queries/persistence via sqlc-generated code. No business logic.
+- **Adapter**: talk to exactly one cloud provider. Never leak provider SDK types upward.
+
+## Storage rules
+Storage providers are implementation details. Business logic must NEVER depend on
+Cloudinary/ImageKit/R2 SDKs directly — only adapters may. All adapters implement:
 ```go
 type StorageAdapter interface {
     Upload(ctx context.Context, input UploadInput) (*UploadResult, error)
@@ -273,331 +58,62 @@ type StorageAdapter interface {
 }
 ```
 
----
+## Metadata rule
+Files live in storage. **Truth lives in PostgreSQL.** Never use cloud storage as
+the source of truth for business logic.
 
-# Metadata Rules
+## API is the source of business logic
+Web and CLI are thin clients. Business logic must NOT live in React components,
+CLI commands, or handlers.
 
-Files live in storage.
+## Validation
+Validate ALL external input (HTTP body/query/route params, env vars, webhooks, CLI
+args) with validator v10. Never trust external data.
 
-Truth lives in PostgreSQL.
+## Go rules
+- `gofmt` + `golangci-lint`. Handle errors explicitly — never ignore. Wrap with `%w`:
+  ```go
+  result, err := service.DoSomething(ctx)
+  if err != nil { return fmt.Errorf("failed to do something: %w", err) }
+  ```
+- Interfaces for abstraction (StorageAdapter, Repository). Composition over inheritance. `context.Context` first arg everywhere. PascalCase exported / camelCase unexported.
+- Avoid: `panic()` (except unrecoverable startup), `interface{}`, globals (except config).
+- Keep functions small. Use concise names (`asset`, not `assetEntityAggregateRoot`).
 
-Business logic must never use cloud storage as the source of truth.
+## Database rules
+SQL migrations are the source of truth. Every schema change needs: (1) SQL migration
+`timestamp_name.up.sql`, (2) sqlc query defs, (3) repository update. Never modify
+production schemas manually. Use sqlc for type-safe queries; write explicit SQL, no ORM.
 
----
-
-# API Rules
-
-API is the source of business logic.
-
-Web and CLI are thin clients.
-
-Business logic must not live in:
-
-* React components
-* CLI commands
-* Handlers (keep handlers thin)
-
----
-
-# Validation Rules
-
-All external input must be validated.
-
-Sources:
-
-* HTTP requests
-* Query parameters
-* Route parameters
-* Environment variables
-* Webhook payloads
-* CLI arguments
-
-Use Go validator v10 for struct validation.
-
-Never trust external data.
-
----
-
-# Go Rules
-
-Follow standard Go conventions:
-
-* Use `gofmt` for formatting
-* Use `golangci-lint` for linting
-* Handle errors explicitly - never ignore errors
-* Use interfaces for abstraction (StorageAdapter, Repository)
-* Prefer composition over inheritance
-* Use `context.Context` for cancellation and timeouts
-* Follow Go naming conventions (PascalCase for exported, camelCase for unexported)
-
-Avoid:
-
-* `panic()` except for unrecoverable startup errors
-* `interface{}` prefer concrete types or specific interfaces
-* Global variables except for config
-
-Keep functions small and focused.
-
----
-
-# Database Rules
-
-SQL migrations are the source of truth.
-
-Every schema change requires:
-
-1. SQL migration file (timestamp_name.up.sql)
-2. sqlc query definitions
-3. Repository update
-
-Never modify production schemas manually.
-
-Use sqlc for type-safe SQL queries.
-
-Write explicit SQL - avoid ORMs for complex operations.
-
----
-
-# Repository Rules
-
-Repositories are responsible for:
-
-* database access
-* queries
-* persistence
-
-Repositories must not contain business logic.
-
-Repositories use sqlc generated code.
-
----
-
-# Service Rules
-
-Services are responsible for:
-
-* business rules
-* orchestration
-* workflows
-
-Services coordinate repositories and adapters.
-
----
-
-# Handler Rules
-
-Handlers are responsible for:
-
-* request validation
-* calling services
-* returning responses
-
-Handlers must remain thin.
-
----
-
-# API Response Format
-
-Success:
-
+## API response format
 ```json
-{
-  "success": true,
-  "data": {}
-}
+{ "success": true, "data": {} }
+{ "success": false, "error": { "code": "ERROR_CODE", "message": "Human readable" } }
 ```
-
-Error:
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Human readable message"
-  }
-}
-```
-
-Maintain consistent response structure.
-
----
-
-# Performance Rules
-
-Avoid:
-
-* N+1 queries
-* unnecessary joins
-* loading unused relations
-* full table scans
-
-Prefer explicit selects.
-
-Do not optimize prematurely.
-
-Measure before optimizing.
-
----
-
-# Error Handling
-
-In Go, handle errors explicitly:
-
-```go
-result, err := service.DoSomething(ctx)
-if err != nil {
-    return fmt.Errorf("failed to do something: %w", err)
-}
-```
-
-Use error wrapping with `%w` for error chains.
-
-Return errors up the stack.
-
-Convert errors to HTTP responses in handlers.
-
----
-
-# Testing Philosophy
-
-Prioritize:
-
-* repository tests
-* service tests
-* workflow tests
-
-Prefer integration tests.
-
-Avoid excessive mocking.
-
-Test observable behavior, not implementation details.
-
----
-
-# Logging
-
-Log important events:
-
-* uploads
-* downloads
-* deletions
-* storage failures
-* backup failures
-
-Use structured logging (e.g., zerolog, zap).
-
-Avoid noisy logs.
-
----
-
-# Observability
-
-Future stack:
-
-* OpenTelemetry
-* Grafana LGTM
-
-Current MVP:
-
-Keep observability simple.
-
-Do not introduce complex observability frameworks unless required.
-
----
-
-# Code Style
-
-Prefer:
-
-```go
-asset, err := repo.FindByID(ctx, id)
-```
-
-Over:
-
-```go
-assetEntityAggregateRoot, err := repo.FindByID(ctx, id)
-```
-
-Use concise, descriptive names.
-
-Avoid unnecessary verbosity.
-
----
-
-# File Organization
-
-Prefer:
-
-```
-asset/
-  handler.go
-  service.go
-  repository.go
-  models.go
-```
-
-Over:
-
-```
-handlers/
-  asset_handler.go
-
-services/
-  asset_service.go
-
-repositories/
-  asset_repository.go
-```
-
-Modules should own their code.
-
----
-
-# Forbidden Patterns
-
-Do not introduce:
-
-* Generic repositories
-* Base repositories
-* Base services
-* Repository factories
-* Service factories
-* CQRS
-* Event Sourcing
-* Domain Events
-* Dependency Injection Containers
-* Plugin Frameworks
-* Microservices
-
-Unless explicitly requested.
-
----
-
-# Agent Behaviour
-
-Before making changes:
-
-1. Understand the request
-2. Search existing code
-3. Follow conventions
-4. Reuse existing implementations
-5. Minimize changes
-6. Avoid unrelated refactors
-
-When uncertain:
-
-Choose the simplest implementation.
-
----
-
-# Final Rule
-
-Filora is a product.
-
-Not an architecture exercise.
-
-Every abstraction must justify its existence.
-
-Working software beats perfect architecture.
+Keep it consistent. Convert errors to HTTP responses in the handler layer.
+
+## Performance
+Avoid N+1 queries, unnecessary joins, unused relations, full table scans. Prefer
+explicit selects. Don't optimize prematurely — measure first.
+
+## Testing
+Prioritize repository, service, and workflow tests. Prefer integration tests over
+excessive mocking. Test observable behavior, not implementation details.
+
+## Logging & observability
+Structured logging (zerolog/zap) for uploads, downloads, deletions, storage/backup
+failures. Avoid noisy logs. Keep observability simple for MVP (future: OpenTelemetry
++ Grafana LGTM) — don't add complex frameworks unless required.
+
+## Forbidden patterns (unless explicitly requested)
+Generic/base repositories, base services, repository/service factories, CQRS, event
+sourcing, domain events, DI containers, plugin frameworks, microservices.
+
+## Agent behaviour
+Before changing code: understand the request → search existing code → follow
+conventions → reuse existing implementations → minimize changes → avoid unrelated
+refactors. When uncertain, choose the simplest implementation.
+
+## Final rule
+Filora is a product, not an architecture exercise. Every abstraction must justify
+its existence. Working software beats perfect architecture.
