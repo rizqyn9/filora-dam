@@ -1,0 +1,28 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // --- Token-minimal setup for the Filora monorepo ---
+  // AGENTS.md is auto-loaded by opencode, so it is intentionally NOT repeated
+  // under "instructions" (avoids double-loading the same context).
+
+  // Best ecosystem plugin for token reduction. Exposes a `compress` tool the
+  // model uses to summarize stale conversation, deduplicates repeated tool
+  // calls, and purges errored tool inputs. Self-updates via npm.
+  // Config (optional) lives in .opencode/dcp.jsonc — defaults are sensible.
+  "plugin": ["@tarquinen/opencode-dcp"],
+
+  // Automatic compaction when the window fills. DCP owns fine-grained pruning,
+  // so we leave native "prune" off to avoid doing the work twice.
+  "compaction": {
+    "auto": true,
+    "tail_turns": 15
+  },
+
+  // Cap very large tool outputs kept in-context. The FULL output is still
+  // written to disk and stays greppable/readable, so nothing is lost — the
+  // model just doesn't pay tokens for 2000-line dumps by default.
+  "tool_output": {
+    "max_lines": 500,
+    "max_bytes": 24576
+  }
+}
