@@ -27,14 +27,18 @@
       "error",
       { "cases": { "kebabCase": true, "pascalCase": true } }
     ],
-    "react/react-in-jsx-scope": "off"
+    "react/react-in-jsx-scope": "off",
+    "react/no-unstable-nested-components": ["warn", { "allowAsProps": true }]
   },
   "overrides": [
     {
       "files": ["src/components/ui/**"],
       "rules": {
         "unicorn/filename-case": "off",
-        "typescript/no-explicit-any": "off"
+        "typescript/no-explicit-any": "off",
+        "eslint/no-shadow": "off",
+        "jsx-a11y/prefer-tag-over-role": "off",
+        "react/no-unstable-nested-components": "off"
       }
     },
     {
