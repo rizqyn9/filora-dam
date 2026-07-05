@@ -1,49 +1,20 @@
 import { create } from "zustand";
 
-import { setAuthTokenProvider, setUnauthorizedHandler } from "@/lib/api-client";
-
 /**
- * Auth session state — auth-agnostic.
+ * Auth session state — a Clerk-agnostic mirror of "is the user signed in".
  *
- * Today it holds a bearer token directly (dev / CLI-token flows). When Clerk is
- * wired in, replace `setToken` usage with a Clerk token provider:
- *
- *   setAuthTokenProvider(() => clerk.session?.getToken() ?? null)
- *
- * ...and this store can just mirror `isAuthenticated`. Nothing else in the app
- * needs to change because everything reads auth through this store / the api
- * client's injected provider.
+ * Clerk owns the real session and token lifecycle (see components/clerk-auth-
+ * bridge.tsx, which pushes Clerk state in here and wires the api client's token
+ * provider). This store exists only so non-React call sites — notably the
+ * `_app` route guard's `beforeLoad`, which runs outside React — can read auth
+ * state synchronously via `useAuthStore.getState()`.
  */
 interface AuthState {
-  token: string | null;
   isAuthenticated: boolean;
-  setToken: (token: string | null) => void;
-  clear: () => void;
+  setAuthenticated: (value: boolean) => void;
 }
-
-const STORAGE_KEY = "filora-auth-token";
 
 export const useAuthStore = create<AuthState>((set) => ({
-  token: localStorage.getItem(STORAGE_KEY),
-  isAuthenticated: Boolean(localStorage.getItem(STORAGE_KEY)),
-
-  setToken: (token) => {
-    if (token) localStorage.setItem(STORAGE_KEY, token);
-    else localStorage.removeItem(STORAGE_KEY);
-    set({ token, isAuthenticated: Boolean(token) });
-  },
-
-  clear: () => {
-    localStorage.removeItem(STORAGE_KEY);
-    set({ token: null, isAuthenticated: false });
-  },
+  isAuthenticated: false,
+  setAuthenticated: (value) => set({ isAuthenticated: value }),
 }));
-
-/**
- * Bind the api client's token provider + 401 handler to this store.
- * Call once at bootstrap (see main.tsx).
- */
-export function initAuthBridge() {
-  setAuthTokenProvider(() => useAuthStore.getState().token);
-  setUnauthorizedHandler(() => useAuthStore.getState().clear());
-}

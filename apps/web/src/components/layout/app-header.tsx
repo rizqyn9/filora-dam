@@ -1,8 +1,9 @@
+import { useClerk, useUser } from "@clerk/clerk-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Bell, LogOut, Search, Settings, User } from "lucide-react";
 
 import { ModeToggle } from "@/components/mode-toggle";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -16,18 +17,18 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { getInitials } from "@/lib/utils";
-import { useAuthStore } from "@/stores/auth-store";
-
-// Presentational placeholder — swap for `useMe()` once auth is wired.
-const currentUser = { name: "Rizqy Nugroho", email: "rizqy@filora.app" };
 
 export function AppHeader() {
   const navigate = useNavigate();
-  const clear = useAuthStore((s) => s.clear);
+  const { signOut } = useClerk();
+  const { user } = useUser();
+
+  const name = user?.fullName ?? "Account";
+  const email = user?.primaryEmailAddress?.emailAddress ?? "";
+  const avatarUrl = user?.imageUrl;
 
   const logout = () => {
-    clear();
-    void navigate({ to: "/login" });
+    void signOut(() => navigate({ to: "/login" }));
   };
 
   return (
@@ -50,20 +51,21 @@ export function AppHeader() {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="ml-1 h-9 gap-2 px-1.5 md:px-2">
               <Avatar className="size-7">
+                {avatarUrl && <AvatarImage src={avatarUrl} alt={name} />}
                 <AvatarFallback className="text-xs">
-                  {getInitials(currentUser.name)}
+                  {getInitials(name)}
                 </AvatarFallback>
               </Avatar>
               <span className="hidden text-sm font-medium md:inline">
-                {currentUser.name}
+                {name}
               </span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel className="flex flex-col">
-              <span>{currentUser.name}</span>
+              <span>{name}</span>
               <span className="text-xs font-normal text-muted-foreground">
-                {currentUser.email}
+                {email}
               </span>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
