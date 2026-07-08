@@ -51,3 +51,6 @@ install-tools: ## Install development tools
 deps: ## Download dependencies
 	@go mod download
 	@go mod tidy
+
+kill: ## Kill port 8000
+	lsof -ti:8000 | xargs kill -9 2>/dev/null; echo "done"; lsof -i:8000

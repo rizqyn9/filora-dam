@@ -1,10 +1,54 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { ArrowUpDown } from "lucide-react";
+import { ArrowUpDown, Pencil, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 
+import { RowActions } from "@/components/row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { GalleryDeleteDialog } from "@/features/galleries/components/gallery-delete-dialog";
+import { GalleryFormDialog } from "@/features/galleries/components/gallery-form-dialog";
 import type { Gallery } from "@/features/galleries/schemas";
 import { formatBytes, formatDate } from "@/lib/format";
+
+function GalleryRowActions({ gallery }: { gallery: Gallery }) {
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  return (
+    <>
+      <RowActions
+        actions={[
+          {
+            label: "Edit",
+            icon: Pencil,
+            onSelect: () => setEditOpen(true),
+          },
+          {
+            label: "Delete",
+            icon: Trash2,
+            destructive: true,
+            separatorBefore: true,
+            onSelect: () =>
+              gallery.is_default
+                ? toast.error("The default gallery cannot be deleted")
+                : setDeleteOpen(true),
+          },
+        ]}
+      />
+      <GalleryFormDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        gallery={gallery}
+      />
+      <GalleryDeleteDialog
+        gallery={gallery}
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+      />
+    </>
+  );
+}
 
 export const galleryColumns: ColumnDef<Gallery>[] = [
   {
@@ -51,5 +95,13 @@ export const galleryColumns: ColumnDef<Gallery>[] = [
     accessorKey: "created_at",
     header: "Created",
     cell: ({ row }) => formatDate(row.original.created_at),
+  },
+  {
+    id: "actions",
+    cell: ({ row }) => (
+      <div className="text-right">
+        <GalleryRowActions gallery={row.original} />
+      </div>
+    ),
   },
 ];

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -18,6 +20,18 @@ func New(ctx context.Context, url string) (*DB, error) {
 	cfg, err := pgxpool.ParseConfig(url)
 	if err != nil {
 		return nil, fmt.Errorf("parse database url: %w", err)
+	}
+
+	// Always scan timestamptz values into UTC regardless of the server
+	// process's local timezone, so JSON responses consistently use a "Z"
+	// suffix that clients (e.g. Zod's z.iso.datetime()) can parse.
+	cfg.AfterConnect = func(_ context.Context, conn *pgx.Conn) error {
+		conn.TypeMap().RegisterType(&pgtype.Type{
+			Name:  "timestamptz",
+			OID:   pgtype.TimestamptzOID,
+			Codec: &pgtype.TimestamptzCodec{ScanLocation: time.UTC},
+		})
+		return nil
 	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)

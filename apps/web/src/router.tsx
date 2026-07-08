@@ -1,23 +1,23 @@
-import { createRouter } from "@tanstack/react-router";
+import { createRouter as createTanStackRouter } from "@tanstack/react-router";
 
 import { queryClient } from "@/lib/query-client";
-import { routeTree } from "@/routeTree.gen";
 
-/**
- * SPA router. Route context carries the shared queryClient so route loaders
- * can prefetch server state (see routes/galleries/index.tsx).
- */
-export const router = createRouter({
-  routeTree,
-  context: { queryClient },
-  defaultPreload: "intent",
-  // React Query owns caching; the router shouldn't cache loader data itself.
-  defaultPreloadStaleTime: 0,
-  scrollRestoration: true,
-});
+import { routeTree } from "./routeTree.gen";
+
+export function getRouter() {
+  const router = createTanStackRouter({
+    routeTree,
+    context: { queryClient },
+    scrollRestoration: true,
+    defaultPreload: "intent",
+    defaultPreloadStaleTime: 0,
+  });
+
+  return router;
+}
 
 declare module "@tanstack/react-router" {
   interface Register {
-    router: typeof router;
+    router: ReturnType<typeof getRouter>;
   }
 }
