@@ -1,4 +1,4 @@
-package gallery
+package space
 
 import (
 	"strconv"
@@ -18,7 +18,7 @@ func NewHandler(svc *Service) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(router fiber.Router, authMW fiber.Handler) {
-	g := router.Group("/galleries", authMW)
+	g := router.Group("/spaces", authMW)
 	g.Post("/", h.create)
 	g.Get("/", h.list)
 	g.Get("/:id", h.get)
@@ -42,15 +42,15 @@ func (h *Handler) create(c fiber.Ctx) error {
 	if p == nil {
 		return lib.ErrUnauthorized("not authenticated")
 	}
-	var in CreateGalleryInput
+	var in CreateSpaceInput
 	if err := c.Bind().Body(&in); err != nil {
 		return lib.ErrBadRequest("invalid request body").Wrap(err)
 	}
-	g, err := h.svc.Create(c.Context(), p.UserID, in)
+	sp, err := h.svc.Create(c.Context(), p.UserID, in)
 	if err != nil {
 		return err
 	}
-	return lib.Created(c, g)
+	return lib.Created(c, sp)
 }
 
 func (h *Handler) list(c fiber.Ctx) error {
@@ -58,11 +58,11 @@ func (h *Handler) list(c fiber.Ctx) error {
 	if p == nil {
 		return lib.ErrUnauthorized("not authenticated")
 	}
-	gs, err := h.svc.List(c.Context(), p.UserID)
+	spaces, err := h.svc.List(c.Context(), p.UserID)
 	if err != nil {
 		return err
 	}
-	return lib.OK(c, gs)
+	return lib.OK(c, spaces)
 }
 
 func (h *Handler) get(c fiber.Ctx) error {
@@ -74,11 +74,11 @@ func (h *Handler) get(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	g, err := h.svc.Get(c.Context(), p.UserID, id)
+	sp, err := h.svc.Get(c.Context(), p.UserID, id)
 	if err != nil {
 		return err
 	}
-	return lib.OK(c, g)
+	return lib.OK(c, sp)
 }
 
 func (h *Handler) update(c fiber.Ctx) error {
@@ -90,15 +90,15 @@ func (h *Handler) update(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	var in UpdateGalleryInput
+	var in UpdateSpaceInput
 	if err := c.Bind().Body(&in); err != nil {
 		return lib.ErrBadRequest("invalid request body").Wrap(err)
 	}
-	g, err := h.svc.Update(c.Context(), p.UserID, id, in)
+	sp, err := h.svc.Update(c.Context(), p.UserID, id, in)
 	if err != nil {
 		return err
 	}
-	return lib.OK(c, g)
+	return lib.OK(c, sp)
 }
 
 func (h *Handler) delete(c fiber.Ctx) error {
@@ -238,11 +238,11 @@ func (h *Handler) acceptInvitation(c fiber.Ctx) error {
 	if err := c.Bind().Body(&in); err != nil {
 		return lib.ErrBadRequest("invalid request body").Wrap(err)
 	}
-	g, err := h.svc.Accept(c.Context(), p.UserID, p.Email, in)
+	sp, err := h.svc.Accept(c.Context(), p.UserID, p.Email, in)
 	if err != nil {
 		return err
 	}
-	return lib.OK(c, g)
+	return lib.OK(c, sp)
 }
 
 func paramInt64(c fiber.Ctx, key string) (int64, error) {

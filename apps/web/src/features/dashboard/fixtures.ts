@@ -5,12 +5,12 @@ import type {
   UsagePoint,
 } from "@/features/dashboard/types";
 
-// Demo data for slicing. Replace with the `/galleries/:id/dashboard` query.
+// Demo data for slicing. Replace with the `/spaces/:id/dashboard` query.
 
 export const summary: DashboardSummary = {
   totalAssets: 12_480,
   totalSize: 348_205_871_104, // ~324 GB
-  galleries: 18,
+  spaces: 18,
   storageUsed: 348_205_871_104,
   storageQuota: 549_755_813_888, // 512 GB
 };

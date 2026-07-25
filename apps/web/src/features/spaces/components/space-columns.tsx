@@ -6,12 +6,12 @@ import { toast } from "sonner";
 import { RowActions } from "@/components/row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { GalleryDeleteDialog } from "@/features/galleries/components/gallery-delete-dialog";
-import { GalleryFormDialog } from "@/features/galleries/components/gallery-form-dialog";
-import type { Gallery } from "@/features/galleries/schemas";
+import { SpaceDeleteDialog } from "@/features/spaces/components/space-delete-dialog";
+import { SpaceFormDialog } from "@/features/spaces/components/space-form-dialog";
+import type { Space } from "@/features/spaces/schemas";
 import { formatBytes, formatDate } from "@/lib/format";
 
-function GalleryRowActions({ gallery }: { gallery: Gallery }) {
+function SpaceRowActions({ space }: { space: Space }) {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
@@ -30,19 +30,19 @@ function GalleryRowActions({ gallery }: { gallery: Gallery }) {
             destructive: true,
             separatorBefore: true,
             onSelect: () =>
-              gallery.is_default
-                ? toast.error("The default gallery cannot be deleted")
+              space.is_default
+                ? toast.error("The default space cannot be deleted")
                 : setDeleteOpen(true),
           },
         ]}
       />
-      <GalleryFormDialog
+      <SpaceFormDialog
         open={editOpen}
         onOpenChange={setEditOpen}
-        gallery={gallery}
+        space={space}
       />
-      <GalleryDeleteDialog
-        gallery={gallery}
+      <SpaceDeleteDialog
+        space={space}
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
       />
@@ -50,7 +50,7 @@ function GalleryRowActions({ gallery }: { gallery: Gallery }) {
   );
 }
 
-export const galleryColumns: ColumnDef<Gallery>[] = [
+export const spaceColumns: ColumnDef<Space>[] = [
   {
     accessorKey: "name",
     header: ({ column }) => (
@@ -75,7 +75,7 @@ export const galleryColumns: ColumnDef<Gallery>[] = [
     header: "Description",
     cell: ({ row }) => (
       <span className="text-muted-foreground">
-        {row.original.description ?? "—"}
+        {row.original.description ?? "\u2014"}
       </span>
     ),
   },
@@ -100,7 +100,7 @@ export const galleryColumns: ColumnDef<Gallery>[] = [
     id: "actions",
     cell: ({ row }) => (
       <div className="text-right">
-        <GalleryRowActions gallery={row.original} />
+        <SpaceRowActions space={row.original} />
       </div>
     ),
   },

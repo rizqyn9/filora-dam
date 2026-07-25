@@ -16,12 +16,12 @@ import (
 	"github.com/rizqynugroho9/filora-dam/api/internal/database"
 	"github.com/rizqynugroho9/filora-dam/api/internal/middleware"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/account"
-	"github.com/rizqynugroho9/filora-dam/api/internal/modules/album"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/asset"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/dashboard"
-	"github.com/rizqynugroho9/filora-dam/api/internal/modules/gallery"
+	"github.com/rizqynugroho9/filora-dam/api/internal/modules/folder"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/rbac"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/session"
+	"github.com/rizqynugroho9/filora-dam/api/internal/modules/space"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/storage"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/tag"
 	"github.com/rizqynugroho9/filora-dam/api/internal/server"
@@ -54,16 +54,16 @@ func main() {
 
 	authorizer := auth.NewAuthorizer(db.Pool)
 
-	galleryRepo := gallery.NewRepository(db.Pool)
-	gallerySvc := gallery.NewService(galleryRepo, authorizer)
-	galleryHandler := gallery.NewHandler(gallerySvc)
+	spaceRepo := space.NewRepository(db.Pool)
+	spaceSvc := space.NewService(spaceRepo, authorizer)
+	spaceHandler := space.NewHandler(spaceSvc)
 
-	albumRepo := album.NewRepository(db.Pool)
-	albumSvc := album.NewService(albumRepo, authorizer, gallerySvc)
-	albumHandler := album.NewHandler(albumSvc)
+	folderRepo := folder.NewRepository(db.Pool)
+	folderSvc := folder.NewService(folderRepo, authorizer, spaceSvc)
+	folderHandler := folder.NewHandler(folderSvc)
 
 	tagRepo := tag.NewRepository(db.Pool)
-	tagSvc := tag.NewService(tagRepo, authorizer, gallerySvc)
+	tagSvc := tag.NewService(tagRepo, authorizer, spaceSvc)
 	tagHandler := tag.NewHandler(tagSvc)
 
 	storageRepo := storage.NewRepository(db.Pool)
@@ -71,15 +71,15 @@ func main() {
 	storageHandler := storage.NewHandler(storageSvc, authorizer)
 
 	assetRepo := asset.NewRepository(db.Pool)
-	assetSvc := asset.NewService(assetRepo, authorizer, gallerySvc, storageSvc)
+	assetSvc := asset.NewService(assetRepo, authorizer, spaceSvc, storageSvc)
 	assetHandler := asset.NewHandler(assetSvc)
 
 	dashboardRepo := dashboard.NewRepository(db.Pool)
-	dashboardSvc := dashboard.NewService(dashboardRepo, authorizer, gallerySvc)
+	dashboardSvc := dashboard.NewService(dashboardRepo, authorizer, spaceSvc)
 	dashboardHandler := dashboard.NewHandler(dashboardSvc)
 
-	// gallery provisions each user's default gallery on first sync
-	accountSvc.SetProvisioner(gallerySvc)
+	// Space provisions each user's default space on first sync.
+	accountSvc.SetProvisioner(spaceSvc)
 	accountHandler := account.NewHandler(accountSvc, cfg.ClerkWebhookSigningSecret)
 
 	rbacRepo := rbac.NewRepository(db.Pool)
@@ -110,8 +110,8 @@ func main() {
 		Account:   accountHandler,
 		RBAC:      rbacHandler,
 		Session:   sessionHandler,
-		Gallery:   galleryHandler,
-		Album:     albumHandler,
+		Space:     spaceHandler,
+		Folder:    folderHandler,
 		Tag:       tagHandler,
 		Storage:   storageHandler,
 		Asset:     assetHandler,

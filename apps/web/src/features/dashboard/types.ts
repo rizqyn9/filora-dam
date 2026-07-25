@@ -23,7 +23,7 @@ export interface RecentAsset {
 export interface DashboardSummary {
   totalAssets: number;
   totalSize: number;
-  galleries: number;
+  spaces: number;
   storageUsed: number;
   storageQuota: number;
 }

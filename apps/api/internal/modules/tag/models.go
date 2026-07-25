@@ -4,7 +4,7 @@ import "time"
 
 type Tag struct {
 	ID        int64     `json:"id"`
-	GalleryID int64     `json:"gallery_id"`
+	SpaceID   int64     `json:"space_id"`
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

@@ -41,6 +41,9 @@ db-seed: ## Seed baseline RBAC roles/permissions
 	@test -f .env && export $$(cat .env | grep -v '^#' | xargs) && \
 	psql "$$DATABASE_URL" -f internal/database/seed.sql
 
+db-migrate: ## Run pending SQL migrations via Go (no psql needed)
+	@go run cmd/migrate/main.go
+
 sqlc: ## Generate sqlc code
 	@sqlc generate
 

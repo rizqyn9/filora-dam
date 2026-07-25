@@ -1,22 +1,22 @@
--- name: GalleryAssetStats :one
+-- name: SpaceAssetStats :one
 SELECT
     count(*)                        AS total_assets,
     COALESCE(sum(size), 0)::bigint  AS total_size,
     count(DISTINCT type)            AS type_count
 FROM assets
-WHERE gallery_id = $1 AND deleted_at IS NULL;
+WHERE space_id = $1 AND deleted_at IS NULL;
 
--- name: GalleryAssetCountsByType :many
+-- name: SpaceAssetCountsByType :many
 SELECT type, count(*) AS count
 FROM assets
-WHERE gallery_id = $1 AND deleted_at IS NULL
+WHERE space_id = $1 AND deleted_at IS NULL
 GROUP BY type
 ORDER BY count DESC;
 
--- name: GalleryRecentAssets :many
+-- name: SpaceRecentAssets :many
 SELECT id, name, type, mime_type, size, created_at
 FROM assets
-WHERE gallery_id = $1 AND deleted_at IS NULL
+WHERE space_id = $1 AND deleted_at IS NULL
 ORDER BY created_at DESC
 LIMIT $2;
 

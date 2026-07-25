@@ -1,7 +1,7 @@
 export interface Tag {
   id: number;
   name: string;
-  galleryName: string;
+  spaceName: string;
   assetCount: number;
   createdAt: string;
 }

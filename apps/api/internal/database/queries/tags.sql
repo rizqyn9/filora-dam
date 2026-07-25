@@ -1,13 +1,13 @@
 -- name: CreateTag :one
-INSERT INTO tags (gallery_id, name, created_by)
+INSERT INTO tags (space_id, name, created_by)
 VALUES ($1, $2, $3)
 RETURNING *;
 
 -- name: GetTagByID :one
 SELECT * FROM tags WHERE id = $1;
 
--- name: ListTagsByGallery :many
-SELECT * FROM tags WHERE gallery_id = $1 ORDER BY name;
+-- name: ListTagsBySpace :many
+SELECT * FROM tags WHERE space_id = $1 ORDER BY name;
 
 -- name: UpdateTag :one
 UPDATE tags SET name = $2 WHERE id = $1 RETURNING *;

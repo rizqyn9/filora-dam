@@ -20,9 +20,9 @@ func NewHandler(svc *Service) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(router fiber.Router, authMW fiber.Handler) {
-	byGallery := router.Group("/galleries/:galleryId/tags", authMW)
-	byGallery.Post("/", h.create)
-	byGallery.Get("/", h.list)
+	bySpace := router.Group("/spaces/:spaceId/tags", authMW)
+	bySpace.Post("/", h.create)
+	bySpace.Get("/", h.list)
 
 	t := router.Group("/tags", authMW)
 	t.Patch("/:id", h.update)
@@ -36,7 +36,7 @@ func (h *Handler) create(c fiber.Ctx) error {
 	if p == nil {
 		return lib.ErrUnauthorized("not authenticated")
 	}
-	galleryID, err := paramInt64(c, "galleryId")
+	spaceID, err := paramInt64(c, "spaceId")
 	if err != nil {
 		return err
 	}
@@ -44,7 +44,7 @@ func (h *Handler) create(c fiber.Ctx) error {
 	if err := c.Bind().Body(&in); err != nil {
 		return lib.ErrBadRequest("invalid request body").Wrap(err)
 	}
-	t, err := h.svc.Create(c.Context(), p.UserID, galleryID, in)
+	t, err := h.svc.Create(c.Context(), p.UserID, spaceID, in)
 	if err != nil {
 		return err
 	}
@@ -56,11 +56,11 @@ func (h *Handler) list(c fiber.Ctx) error {
 	if p == nil {
 		return lib.ErrUnauthorized("not authenticated")
 	}
-	galleryID, err := paramInt64(c, "galleryId")
+	spaceID, err := paramInt64(c, "spaceId")
 	if err != nil {
 		return err
 	}
-	tags, err := h.svc.ListByGallery(c.Context(), p.UserID, galleryID)
+	tags, err := h.svc.ListBySpace(c.Context(), p.UserID, spaceID)
 	if err != nil {
 		return err
 	}

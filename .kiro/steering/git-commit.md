@@ -2,24 +2,83 @@
 inclusion: manual
 ---
 
-# Git Commit
+# Git Commit Conventions
 
-Format: `type(scope): subject`
+Rules for writing commit messages in the Filora project.
 
-- Imperative mood, max 72 chars, no period
-- One logical change per commit (atomic)
-- Subject-only — no body unless the "why" is non-obvious
+## Format
 
-Types: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`, `perf`
-
-Scopes: `agents`, `workers`, `infrastructure`, `services`, `ui`, `api`, `models`, `terraform`, `config`, `tooling`, `workflows`, `prompts`
-
-Multi-scope: `feat(agents,ui): Add test case editing`
-
-Examples:
 ```
-feat(workers): Add Playwright script retry logic
-fix(api): Return 404 for missing scenario
-refactor(infrastructure): Extract S3 upload to shared helper
-chore(tooling): Update ruff to 0.8
+type(scope): subject
+```
+
+- Imperative mood, lowercase subject, no trailing period.
+- Max 72 characters for the subject line.
+- One logical change per commit (atomic). Don't mix refactors with features.
+- Subject-only by default. Add a body only when the "why" is non-obvious.
+- No emoji prefixes.
+
+## Types
+
+| Type | Use for |
+|------|---------|
+| `feat` | New feature or user-facing behavior |
+| `fix` | Bug fix |
+| `refactor` | Code restructuring with no behavior change |
+| `chore` | Tooling, deps, config, CI — no production logic change |
+| `docs` | Documentation only |
+| `test` | Adding or updating tests |
+| `perf` | Performance improvement |
+
+## Scopes
+
+Scope reflects the area of code changed. Use the most specific applicable scope.
+
+| Scope | Applies to |
+|-------|-----------|
+| `api` | `apps/api` — handlers, services, middleware, server config |
+| `cli` | `apps/cli` — CLI client code |
+| `web` | `apps/web` — React frontend |
+| `db` | Database migrations, sqlc queries, schema changes |
+| `auth` | Authentication/authorization (Clerk integration, RBAC) |
+| `storage` | Storage adapters (Cloudinary, ImageKit, R2) |
+| `assets` | Asset module (upload, dedup, trash, download) |
+| `spaces` | Space module (members, invitations) |
+| `folders` | Folder module (hierarchy, navigation) |
+| `tags` | Tag module |
+| `dashboard` | Dashboard module |
+| `docs` | `docs/` directory (use `docs` type + omit scope for doc-only changes) |
+| `config` | App configuration, env vars |
+
+Multi-scope is allowed when a change spans two areas: `feat(api,web): ...`
+
+Omit scope for truly cross-cutting changes: `chore: update Go dependencies`
+
+## Body (when needed)
+
+Separate from subject with a blank line. Wrap at 72 characters. Explain **why**, not what — the diff shows what changed.
+
+```
+fix(assets): prevent duplicate upload when hash matches trashed asset
+
+The dedup check was not considering soft-deleted assets, causing a
+constraint violation on re-upload after trash.
+```
+
+## Staging
+
+- Stage specific files, not `git add .` or `git add -A`.
+- Never commit `.env`, secrets, or generated files (`bin/`, `node_modules/`).
+- Run linters/formatters before committing — don't create fixup commits for lint.
+
+## Examples
+
+```
+feat(spaces): add member invitation endpoint
+fix(api): return 404 for missing space instead of 500
+refactor(storage): extract upload validation to shared helper
+chore(web): update TanStack Router to v1.120
+docs: add storage adapter architecture doc
+test(auth): add RBAC permission boundary tests
+perf(db): add index on assets.space_id for listing queries
 ```

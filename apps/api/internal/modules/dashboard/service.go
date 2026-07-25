@@ -9,35 +9,35 @@ import (
 
 const recentLimit = 10
 
-// Galleries exposes gallery membership and quota (implemented by gallery.Service).
-type Galleries interface {
-	RoleOf(ctx context.Context, galleryID, userID int64) (string, bool, error)
-	QuotaInfo(ctx context.Context, galleryID int64) (used, quota int64, err error)
+// Spaces exposes space membership and quota (implemented by space.Service).
+type Spaces interface {
+	RoleOf(ctx context.Context, spaceID, userID int64) (string, bool, error)
+	QuotaInfo(ctx context.Context, spaceID int64) (used, quota int64, err error)
 }
 
 type Service struct {
-	repo      *Repository
-	authz     *auth.Authorizer
-	galleries Galleries
+	repo   *Repository
+	authz  *auth.Authorizer
+	spaces Spaces
 }
 
-func NewService(repo *Repository, authz *auth.Authorizer, galleries Galleries) *Service {
-	return &Service{repo: repo, authz: authz, galleries: galleries}
+func NewService(repo *Repository, authz *auth.Authorizer, spaces Spaces) *Service {
+	return &Service{repo: repo, authz: authz, spaces: spaces}
 }
 
-// Gallery returns the per-gallery dashboard for a member (or admin).
-func (s *Service) Gallery(ctx context.Context, userID, galleryID int64) (GalleryDashboard, error) {
-	if err := s.accessGallery(ctx, userID, galleryID); err != nil {
-		return GalleryDashboard{}, err
+// Space returns the per-space dashboard for a member (or admin).
+func (s *Service) Space(ctx context.Context, userID, spaceID int64) (SpaceDashboard, error) {
+	if err := s.accessSpace(ctx, userID, spaceID); err != nil {
+		return SpaceDashboard{}, err
 	}
 
-	stats, err := s.repo.GalleryStats(ctx, galleryID)
+	stats, err := s.repo.SpaceStats(ctx, spaceID)
 	if err != nil {
-		return GalleryDashboard{}, err
+		return SpaceDashboard{}, err
 	}
-	used, quota, err := s.galleries.QuotaInfo(ctx, galleryID)
+	used, quota, err := s.spaces.QuotaInfo(ctx, spaceID)
 	if err != nil {
-		return GalleryDashboard{}, err
+		return SpaceDashboard{}, err
 	}
 	stats.StorageQuota = quota
 	stats.StorageUsed = used
@@ -46,16 +46,16 @@ func (s *Service) Gallery(ctx context.Context, userID, galleryID int64) (Gallery
 		stats.StorageFree = 0
 	}
 
-	types, err := s.repo.TypeCounts(ctx, galleryID)
+	types, err := s.repo.TypeCounts(ctx, spaceID)
 	if err != nil {
-		return GalleryDashboard{}, err
+		return SpaceDashboard{}, err
 	}
-	recent, err := s.repo.RecentAssets(ctx, galleryID, recentLimit)
+	recent, err := s.repo.RecentAssets(ctx, spaceID, recentLimit)
 	if err != nil {
-		return GalleryDashboard{}, err
+		return SpaceDashboard{}, err
 	}
 
-	return GalleryDashboard{Stats: stats, TypeCounts: types, Recent: recent}, nil
+	return SpaceDashboard{Stats: stats, TypeCounts: types, Recent: recent}, nil
 }
 
 // System returns the admin-level dashboard (requires workspace-wide dashboard:read).
@@ -74,8 +74,8 @@ func (s *Service) System(ctx context.Context, userID int64) (SystemDashboard, er
 	return SystemDashboard{ArchiveJobs: jobs}, nil
 }
 
-// accessGallery enforces dashboard:read globally, then (own scope) gallery membership.
-func (s *Service) accessGallery(ctx context.Context, userID, galleryID int64) error {
+// accessSpace enforces dashboard:read globally, then (own scope) space membership.
+func (s *Service) accessSpace(ctx context.Context, userID, spaceID int64) error {
 	dec, err := s.authz.Authorize(ctx, userID, "dashboard", "read")
 	if err != nil {
 		return err
@@ -86,12 +86,12 @@ func (s *Service) accessGallery(ctx context.Context, userID, galleryID int64) er
 	if dec.Scope == auth.ScopeAll {
 		return nil
 	}
-	_, ok, err := s.galleries.RoleOf(ctx, galleryID, userID)
+	_, ok, err := s.spaces.RoleOf(ctx, spaceID, userID)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		return lib.ErrForbidden("you are not a member of this gallery")
+		return lib.ErrForbidden("you are not a member of this space")
 	}
 	return nil
 }

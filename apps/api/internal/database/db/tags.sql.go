@@ -28,23 +28,23 @@ func (q *Queries) AttachTag(ctx context.Context, arg AttachTagParams) error {
 }
 
 const createTag = `-- name: CreateTag :one
-INSERT INTO tags (gallery_id, name, created_by)
+INSERT INTO tags (space_id, name, created_by)
 VALUES ($1, $2, $3)
-RETURNING id, gallery_id, name, created_by, created_at, updated_at
+RETURNING id, space_id, name, created_by, created_at, updated_at
 `
 
 type CreateTagParams struct {
-	GalleryID int64  `json:"gallery_id"`
+	SpaceID   int64  `json:"space_id"`
 	Name      string `json:"name"`
 	CreatedBy *int64 `json:"created_by"`
 }
 
 func (q *Queries) CreateTag(ctx context.Context, arg CreateTagParams) (Tag, error) {
-	row := q.db.QueryRow(ctx, createTag, arg.GalleryID, arg.Name, arg.CreatedBy)
+	row := q.db.QueryRow(ctx, createTag, arg.SpaceID, arg.Name, arg.CreatedBy)
 	var i Tag
 	err := row.Scan(
 		&i.ID,
-		&i.GalleryID,
+		&i.SpaceID,
 		&i.Name,
 		&i.CreatedBy,
 		&i.CreatedAt,
@@ -80,7 +80,7 @@ func (q *Queries) DetachTag(ctx context.Context, arg DetachTagParams) (int64, er
 }
 
 const getTagByID = `-- name: GetTagByID :one
-SELECT id, gallery_id, name, created_by, created_at, updated_at FROM tags WHERE id = $1
+SELECT id, space_id, name, created_by, created_at, updated_at FROM tags WHERE id = $1
 `
 
 func (q *Queries) GetTagByID(ctx context.Context, id int64) (Tag, error) {
@@ -88,7 +88,7 @@ func (q *Queries) GetTagByID(ctx context.Context, id int64) (Tag, error) {
 	var i Tag
 	err := row.Scan(
 		&i.ID,
-		&i.GalleryID,
+		&i.SpaceID,
 		&i.Name,
 		&i.CreatedBy,
 		&i.CreatedAt,
@@ -98,7 +98,7 @@ func (q *Queries) GetTagByID(ctx context.Context, id int64) (Tag, error) {
 }
 
 const listAssetTags = `-- name: ListAssetTags :many
-SELECT t.id, t.gallery_id, t.name, t.created_by, t.created_at, t.updated_at
+SELECT t.id, t.space_id, t.name, t.created_by, t.created_at, t.updated_at
 FROM asset_tags at
 JOIN tags t ON t.id = at.tag_id
 WHERE at.asset_id = $1
@@ -116,7 +116,7 @@ func (q *Queries) ListAssetTags(ctx context.Context, assetID uuid.UUID) ([]Tag, 
 		var i Tag
 		if err := rows.Scan(
 			&i.ID,
-			&i.GalleryID,
+			&i.SpaceID,
 			&i.Name,
 			&i.CreatedBy,
 			&i.CreatedAt,
@@ -132,12 +132,12 @@ func (q *Queries) ListAssetTags(ctx context.Context, assetID uuid.UUID) ([]Tag, 
 	return items, nil
 }
 
-const listTagsByGallery = `-- name: ListTagsByGallery :many
-SELECT id, gallery_id, name, created_by, created_at, updated_at FROM tags WHERE gallery_id = $1 ORDER BY name
+const listTagsBySpace = `-- name: ListTagsBySpace :many
+SELECT id, space_id, name, created_by, created_at, updated_at FROM tags WHERE space_id = $1 ORDER BY name
 `
 
-func (q *Queries) ListTagsByGallery(ctx context.Context, galleryID int64) ([]Tag, error) {
-	rows, err := q.db.Query(ctx, listTagsByGallery, galleryID)
+func (q *Queries) ListTagsBySpace(ctx context.Context, spaceID int64) ([]Tag, error) {
+	rows, err := q.db.Query(ctx, listTagsBySpace, spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +147,7 @@ func (q *Queries) ListTagsByGallery(ctx context.Context, galleryID int64) ([]Tag
 		var i Tag
 		if err := rows.Scan(
 			&i.ID,
-			&i.GalleryID,
+			&i.SpaceID,
 			&i.Name,
 			&i.CreatedBy,
 			&i.CreatedAt,
@@ -164,7 +164,7 @@ func (q *Queries) ListTagsByGallery(ctx context.Context, galleryID int64) ([]Tag
 }
 
 const updateTag = `-- name: UpdateTag :one
-UPDATE tags SET name = $2 WHERE id = $1 RETURNING id, gallery_id, name, created_by, created_at, updated_at
+UPDATE tags SET name = $2 WHERE id = $1 RETURNING id, space_id, name, created_by, created_at, updated_at
 `
 
 type UpdateTagParams struct {
@@ -177,7 +177,7 @@ func (q *Queries) UpdateTag(ctx context.Context, arg UpdateTagParams) (Tag, erro
 	var i Tag
 	err := row.Scan(
 		&i.ID,
-		&i.GalleryID,
+		&i.SpaceID,
 		&i.Name,
 		&i.CreatedBy,
 		&i.CreatedAt,

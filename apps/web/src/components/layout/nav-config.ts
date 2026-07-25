@@ -29,7 +29,7 @@ export const navGroups: NavGroup[] = [
     label: "Workspace",
     items: [
       { title: "Dashboard", to: "/", icon: LayoutDashboard },
-      { title: "Galleries", to: "/galleries", icon: Images },
+      { title: "Spaces", to: "/spaces", icon: Images },
       { title: "Tags", to: "/tags", icon: Tags },
     ],
   },

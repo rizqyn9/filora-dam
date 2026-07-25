@@ -61,10 +61,10 @@ export const tagColumns: ColumnDef<Tag>[] = [
     ),
   },
   {
-    accessorKey: "galleryName",
+    accessorKey: "spaceName",
     header: "Gallery",
     cell: ({ row }) => (
-      <span className="text-muted-foreground">{row.original.galleryName}</span>
+      <span className="text-muted-foreground">{row.original.spaceName}</span>
     ),
   },
   {

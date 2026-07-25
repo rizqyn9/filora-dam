@@ -15,7 +15,7 @@ func registerRoutes(app *fiber.App, deps Deps) {
 	app.Get("/", func(c fiber.Ctx) error {
 		return lib.OK(c, fiber.Map{
 			"name":    "Filora DAM API",
-			"version": "0.1.0",
+			"version": "0.2.0",
 			"status":  "ok",
 		})
 	})
@@ -49,11 +49,11 @@ func registerRoutes(app *fiber.App, deps Deps) {
 	if deps.Session != nil {
 		deps.Session.RegisterRoutes(v1, deps.AuthMW)
 	}
-	if deps.Gallery != nil {
-		deps.Gallery.RegisterRoutes(v1, deps.AuthMW)
+	if deps.Space != nil {
+		deps.Space.RegisterRoutes(v1, deps.AuthMW)
 	}
-	if deps.Album != nil {
-		deps.Album.RegisterRoutes(v1, deps.AuthMW)
+	if deps.Folder != nil {
+		deps.Folder.RegisterRoutes(v1, deps.AuthMW)
 	}
 	if deps.Tag != nil {
 		deps.Tag.RegisterRoutes(v1, deps.AuthMW)

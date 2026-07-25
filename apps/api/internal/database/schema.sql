@@ -9,7 +9,7 @@
 --     psql "$DATABASE_URL" -f internal/database/seed.sql
 --
 -- ID strategy:
---   * Control / lookup tables (users, roles, permissions, galleries, albums,
+--   * Control / lookup tables (users, roles, permissions, spaces, folders,
 --     tags, storage_providers) use incremental BIGINT identity columns.
 --   * High-volume / externally-exposed rows (assets, storage_locations,
 --     cli_sessions) use UUID v7 (time-ordered) via uuid_generate_v7().
@@ -18,8 +18,8 @@
 -- Domains:
 --   * Identity & access : users, roles, permissions, role_permissions,
 --                         user_roles, cli_sessions, clerk_webhook_events
---   * Organization      : galleries, gallery_members, albums, album_members,
---                         invitations, album_assets, tags, asset_tags
+--   * Organization      : spaces, space_members, folders, invitations,
+--                         tags, asset_tags
 --   * Assets            : assets (soft-deletable via deleted_at)
 --   * Storage           : storage_providers (2 layers), storage_locations,
 --                         archive_sync_jobs
@@ -31,8 +31,8 @@
 --     may hold many concurrent sessions.
 --   * Global authorization is RBAC: users -> roles -> permissions, each grant
 --     carrying a scope ('own' | 'all'); the 'superuser' role holds ('*','*').
---   * Per-resource sharing of galleries/albums uses a local membership role
---     (owner | editor | viewer).
+--   * Per-resource sharing of spaces uses a local membership role
+--     (owner | editor | viewer). Folders inherit space permissions.
 --
 -- Storage model:
 --   * Two layers. 'serving' = free-tier hot providers (Cloudinary/ImageKit).
@@ -101,7 +101,7 @@ $$;
 --   all : the permission applies to every row in the family workspace.
 CREATE TYPE permission_scope AS ENUM ('own', 'all');
 
--- Local membership role for a gallery or album.
+-- Local membership role for a space.
 CREATE TYPE member_role AS ENUM ('owner', 'editor', 'viewer');
 
 -- Storage layer.
@@ -112,7 +112,7 @@ CREATE TYPE storage_layer AS ENUM ('serving', 'archive');
 -- Lifecycle of a single physical copy (one asset, one provider).
 CREATE TYPE location_status AS ENUM ('pending', 'stored', 'failed');
 
--- Lifecycle of a gallery/album invitation.
+-- Lifecycle of a space invitation.
 CREATE TYPE invitation_status AS ENUM ('pending', 'accepted', 'revoked', 'expired');
 
 -- Lifecycle of a background replication job.
@@ -163,7 +163,7 @@ CREATE TRIGGER trg_roles_updated_at
 -- Wildcard rows use '*' for resource and/or action. ('*','*') = full access.
 CREATE TABLE permissions (
     id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    resource    TEXT        NOT NULL,            -- asset, gallery, album, tag, storage, user, role, session, dashboard, *
+    resource    TEXT        NOT NULL,            -- asset, space, folder, tag, storage, user, role, session, dashboard, *
     action      TEXT        NOT NULL,            -- read, create, update, delete, download, invite, assign, manage, revoke, *
     description TEXT,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -234,46 +234,82 @@ CREATE TABLE clerk_webhook_events (
 CREATE INDEX idx_clerk_webhook_events_unprocessed ON clerk_webhook_events (received_at) WHERE processed_at IS NULL;
 
 -- ----------------------------------------------------------------------------
--- galleries  (top-level asset space; each user gets one default gallery)
+-- spaces  (top-level container; each user gets one default space)
 -- ----------------------------------------------------------------------------
--- Quota is tracked per gallery. Physical capacity is spread across multiple
+-- Quota is tracked per space. Physical capacity is spread across multiple
 -- storage accounts per layer (see storage_providers) to work around per-account
 -- free-tier limits.
-CREATE TABLE galleries (
+CREATE TABLE spaces (
     id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     owner_id      BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name          TEXT        NOT NULL,
     description   TEXT,
-    is_default    BOOLEAN     NOT NULL DEFAULT FALSE, -- the auto-created gallery for a user
-    storage_quota BIGINT      NOT NULL DEFAULT 5368709120, -- 5 GB; per-gallery limit
+    is_default    BOOLEAN     NOT NULL DEFAULT FALSE, -- the auto-created space for a user
+    storage_quota BIGINT      NOT NULL DEFAULT 5368709120, -- 5 GB; per-space limit
     storage_used  BIGINT      NOT NULL DEFAULT 0,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_galleries_owner_id ON galleries (owner_id);
--- at most one default gallery per user
-CREATE UNIQUE INDEX idx_galleries_one_default ON galleries (owner_id) WHERE is_default;
+CREATE INDEX idx_spaces_owner_id ON spaces (owner_id);
+-- at most one default space per user
+CREATE UNIQUE INDEX idx_spaces_one_default ON spaces (owner_id) WHERE is_default;
 
-CREATE TRIGGER trg_galleries_updated_at
-    BEFORE UPDATE ON galleries
+CREATE TRIGGER trg_spaces_updated_at
+    BEFORE UPDATE ON spaces
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ----------------------------------------------------------------------------
--- gallery_members  (who can access a gallery, and at what local role)
+-- space_members  (who can access a space, and at what local role)
 -- ----------------------------------------------------------------------------
--- The gallery owner also gets a row here with role 'owner' (created by the app)
+-- The space owner also gets a row here with role 'owner' (created by the app)
 -- so access checks can be a single membership lookup.
-CREATE TABLE gallery_members (
-    gallery_id BIGINT      NOT NULL REFERENCES galleries(id) ON DELETE CASCADE,
-    user_id    BIGINT      NOT NULL REFERENCES users(id)     ON DELETE CASCADE,
+CREATE TABLE space_members (
+    space_id   BIGINT      NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+    user_id    BIGINT      NOT NULL REFERENCES users(id)  ON DELETE CASCADE,
     role       member_role NOT NULL DEFAULT 'viewer',
     invited_by BIGINT      REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (gallery_id, user_id)
+    PRIMARY KEY (space_id, user_id)
 );
 
-CREATE INDEX idx_gallery_members_user_id ON gallery_members (user_id);
+CREATE INDEX idx_space_members_user_id ON space_members (user_id);
+
+-- ----------------------------------------------------------------------------
+-- folders  (hierarchical file organization within a space)
+-- ----------------------------------------------------------------------------
+-- Folders replace the old "albums" concept. They support nesting via parent_id
+-- (self-referencing FK). The materialized `path` column stores the full
+-- ancestor chain as '/'-separated IDs for efficient breadcrumb queries and
+-- subtree operations without recursive CTEs.
+--
+-- Example path values:
+--   Root folder (no parent):  '/'
+--   Child of folder 5:        '/5/'
+--   Grandchild of 5 → 12:    '/5/12/'
+--
+-- The path always starts and ends with '/' and contains parent IDs only
+-- (not the folder's own ID).
+CREATE TABLE folders (
+    id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    space_id   BIGINT      NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+    parent_id  BIGINT      REFERENCES folders(id) ON DELETE CASCADE,
+    owner_id   BIGINT      NOT NULL REFERENCES users(id)  ON DELETE CASCADE,
+    name       TEXT        NOT NULL,
+    path       TEXT        NOT NULL DEFAULT '/', -- materialized ancestor path
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- no duplicate folder names within the same parent
+    UNIQUE (space_id, parent_id, name)
+);
+
+CREATE INDEX idx_folders_space_id  ON folders (space_id);
+CREATE INDEX idx_folders_parent_id ON folders (parent_id);
+CREATE INDEX idx_folders_path      ON folders USING btree (path text_pattern_ops);
+
+CREATE TRIGGER trg_folders_updated_at
+    BEFORE UPDATE ON folders
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ----------------------------------------------------------------------------
 -- storage_providers  (GLOBAL storage accounts, managed by admins)
@@ -304,12 +340,14 @@ CREATE TRIGGER trg_storage_providers_updated_at
 -- ----------------------------------------------------------------------------
 -- assets  (logical asset records; metadata is the source of truth)
 -- ----------------------------------------------------------------------------
--- An asset lives in exactly one gallery. uploaded_by is the contributor and is
--- used for the RBAC 'own' scope. Deduplication is per gallery. Soft delete
--- (deleted_at) moves an asset to the trash without losing its rows.
+-- An asset lives in exactly one space and optionally in one folder. uploaded_by
+-- is the contributor and is used for the RBAC 'own' scope. Deduplication is per
+-- space. Soft delete (deleted_at) moves an asset to the trash without losing
+-- its rows.
 CREATE TABLE assets (
     id          UUID        PRIMARY KEY DEFAULT uuid_generate_v7(),
-    gallery_id  BIGINT      NOT NULL REFERENCES galleries(id) ON DELETE CASCADE,
+    space_id    BIGINT      NOT NULL REFERENCES spaces(id)  ON DELETE CASCADE,
+    folder_id   BIGINT      REFERENCES folders(id) ON DELETE SET NULL,
     uploaded_by BIGINT      REFERENCES users(id) ON DELETE SET NULL,
     name        TEXT        NOT NULL,
     type        TEXT        NOT NULL CHECK (type IN ('image', 'video', 'document', 'archive', 'file')),
@@ -323,65 +361,32 @@ CREATE TABLE assets (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_assets_gallery_id  ON assets (gallery_id);
+CREATE INDEX idx_assets_space_id    ON assets (space_id);
+CREATE INDEX idx_assets_folder_id   ON assets (folder_id);
 CREATE INDEX idx_assets_uploaded_by ON assets (uploaded_by);
 CREATE INDEX idx_assets_type        ON assets (type);
 CREATE INDEX idx_assets_created_at  ON assets (created_at DESC);
--- fast listing of live (non-trashed) assets in a gallery
-CREATE INDEX idx_assets_gallery_active ON assets (gallery_id) WHERE deleted_at IS NULL;
--- dedup is scoped per gallery and ignores trashed rows, so a re-upload after
+-- fast listing of live (non-trashed) assets in a space
+CREATE INDEX idx_assets_space_active ON assets (space_id) WHERE deleted_at IS NULL;
+-- fast listing of live assets within a specific folder
+CREATE INDEX idx_assets_folder_active ON assets (space_id, folder_id) WHERE deleted_at IS NULL;
+-- dedup is scoped per space and ignores trashed rows, so a re-upload after
 -- deletion is allowed
-CREATE UNIQUE INDEX idx_assets_gallery_hash ON assets (gallery_id, hash) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX idx_assets_space_hash ON assets (space_id, hash) WHERE deleted_at IS NULL;
 
 CREATE TRIGGER trg_assets_updated_at
     BEFORE UPDATE ON assets
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ----------------------------------------------------------------------------
--- albums  (grouping of assets within a gallery)
+-- invitations  (invite a user by email to a space)
 -- ----------------------------------------------------------------------------
-CREATE TABLE albums (
-    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    gallery_id     BIGINT      NOT NULL REFERENCES galleries(id) ON DELETE CASCADE,
-    owner_id       BIGINT      NOT NULL REFERENCES users(id)     ON DELETE CASCADE,
-    name           TEXT        NOT NULL,
-    description    TEXT,
-    cover_asset_id UUID        REFERENCES assets(id) ON DELETE SET NULL,
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_albums_gallery_id ON albums (gallery_id);
-CREATE INDEX idx_albums_owner_id   ON albums (owner_id);
-
-CREATE TRIGGER trg_albums_updated_at
-    BEFORE UPDATE ON albums
-    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-
--- ----------------------------------------------------------------------------
--- album_members  (album owner can invite users to the album)
--- ----------------------------------------------------------------------------
-CREATE TABLE album_members (
-    album_id   BIGINT      NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
-    user_id    BIGINT      NOT NULL REFERENCES users(id)  ON DELETE CASCADE,
-    role       member_role NOT NULL DEFAULT 'viewer',
-    invited_by BIGINT      REFERENCES users(id) ON DELETE SET NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (album_id, user_id)
-);
-
-CREATE INDEX idx_album_members_user_id ON album_members (user_id);
-
--- ----------------------------------------------------------------------------
--- invitations  (invite a user by email to a gallery or album)
--- ----------------------------------------------------------------------------
--- Targets exactly one of gallery_id / album_id (enforced by CHECK). The invitee
--- may not be a user yet: they receive a link with `token`, and on acceptance
--- (after Clerk sign-in) a membership row is created and accepted_user_id is set.
+-- The invitee may not be a user yet: they receive a link with `token`, and on
+-- acceptance (after Clerk sign-in) a membership row is created and
+-- accepted_user_id is set.
 CREATE TABLE invitations (
     id               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    gallery_id       BIGINT      REFERENCES galleries(id) ON DELETE CASCADE,
-    album_id         BIGINT      REFERENCES albums(id)    ON DELETE CASCADE,
+    space_id         BIGINT      NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
     email            TEXT        NOT NULL,
     role             member_role NOT NULL DEFAULT 'viewer',
     token            TEXT        NOT NULL UNIQUE,   -- opaque token for the invite link
@@ -391,49 +396,29 @@ CREATE TABLE invitations (
     expires_at       TIMESTAMPTZ,
     accepted_at      TIMESTAMPTZ,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    -- exactly one target
-    CONSTRAINT invitations_one_target CHECK (
-        (gallery_id IS NOT NULL)::int + (album_id IS NOT NULL)::int = 1
-    )
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_invitations_email ON invitations (email);
--- at most one pending invite per (target, email)
-CREATE UNIQUE INDEX idx_invitations_pending_gallery ON invitations (gallery_id, email)
-    WHERE status = 'pending' AND gallery_id IS NOT NULL;
-CREATE UNIQUE INDEX idx_invitations_pending_album ON invitations (album_id, email)
-    WHERE status = 'pending' AND album_id IS NOT NULL;
+-- at most one pending invite per (space, email)
+CREATE UNIQUE INDEX idx_invitations_pending_space ON invitations (space_id, email)
+    WHERE status = 'pending';
 
 CREATE TRIGGER trg_invitations_updated_at
     BEFORE UPDATE ON invitations
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ----------------------------------------------------------------------------
--- album_assets  (many-to-many: asset <-> album)
--- ----------------------------------------------------------------------------
-CREATE TABLE album_assets (
-    album_id   BIGINT      NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
-    asset_id   UUID        NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
-    added_by   BIGINT      REFERENCES users(id) ON DELETE SET NULL,
-    sort_order INTEGER     NOT NULL DEFAULT 0,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (album_id, asset_id)
-);
-
-CREATE INDEX idx_album_assets_asset_id ON album_assets (asset_id);
-
--- ----------------------------------------------------------------------------
--- tags  (per-gallery tag vocabulary)
+-- tags  (per-space tag vocabulary)
 -- ----------------------------------------------------------------------------
 CREATE TABLE tags (
     id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    gallery_id BIGINT      NOT NULL REFERENCES galleries(id) ON DELETE CASCADE,
+    space_id   BIGINT      NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
     name       TEXT        NOT NULL,
     created_by BIGINT      REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (gallery_id, name)
+    UNIQUE (space_id, name)
 );
 
 CREATE TRIGGER trg_tags_updated_at

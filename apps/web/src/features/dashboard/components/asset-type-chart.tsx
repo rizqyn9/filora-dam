@@ -34,7 +34,7 @@ export function AssetTypeChart({ data }: { data: TypeCount[] }) {
     <Card>
       <CardHeader>
         <CardTitle>Asset types</CardTitle>
-        <CardDescription>Distribution across all galleries.</CardDescription>
+        <CardDescription>Distribution across all spaces.</CardDescription>
       </CardHeader>
       <ChartContainer
         config={chartConfig}

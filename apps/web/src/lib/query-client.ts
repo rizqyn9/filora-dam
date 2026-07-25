@@ -5,7 +5,7 @@ import { ApiError } from "@/lib/api-client";
 /**
  * Shared TanStack Query client.
  *
- * Server state lives here (assets, galleries, albums, ...). Client/UI state
+ * Server state lives here (assets, spaces, folders, ...). Client/UI state
  * lives in Zustand stores (see src/stores). Keep the two separate.
  */
 export const queryClient = new QueryClient({

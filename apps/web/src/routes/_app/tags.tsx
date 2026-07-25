@@ -17,7 +17,7 @@ function TagsPage() {
     <>
       <PageHeader
         title="Tags"
-        description="Manage tags used to organize assets across galleries."
+        description="Manage tags used to organize assets across spaces."
       />
       <DataTable
         columns={tagColumns}

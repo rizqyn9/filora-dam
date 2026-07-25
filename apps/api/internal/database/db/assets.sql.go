@@ -11,26 +11,56 @@ import (
 	"github.com/google/uuid"
 )
 
-const countActiveAssetsByGallery = `-- name: CountActiveAssetsByGallery :one
+const countActiveAssetsByFolder = `-- name: CountActiveAssetsByFolder :one
 SELECT count(*) FROM assets
-WHERE gallery_id = $1 AND deleted_at IS NULL
+WHERE space_id = $1 AND folder_id = $2 AND deleted_at IS NULL
 `
 
-func (q *Queries) CountActiveAssetsByGallery(ctx context.Context, galleryID int64) (int64, error) {
-	row := q.db.QueryRow(ctx, countActiveAssetsByGallery, galleryID)
+type CountActiveAssetsByFolderParams struct {
+	SpaceID  int64  `json:"space_id"`
+	FolderID *int64 `json:"folder_id"`
+}
+
+func (q *Queries) CountActiveAssetsByFolder(ctx context.Context, arg CountActiveAssetsByFolderParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveAssetsByFolder, arg.SpaceID, arg.FolderID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countActiveAssetsBySpace = `-- name: CountActiveAssetsBySpace :one
+SELECT count(*) FROM assets
+WHERE space_id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) CountActiveAssetsBySpace(ctx context.Context, spaceID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveAssetsBySpace, spaceID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countActiveRootAssets = `-- name: CountActiveRootAssets :one
+SELECT count(*) FROM assets
+WHERE space_id = $1 AND folder_id IS NULL AND deleted_at IS NULL
+`
+
+func (q *Queries) CountActiveRootAssets(ctx context.Context, spaceID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveRootAssets, spaceID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
 }
 
 const createAsset = `-- name: CreateAsset :one
-INSERT INTO assets (gallery_id, uploaded_by, name, type, mime_type, size, hash, metadata)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, gallery_id, uploaded_by, name, type, mime_type, size, hash, metadata, deleted_at, deleted_by, created_at, updated_at
+INSERT INTO assets (space_id, folder_id, uploaded_by, name, type, mime_type, size, hash, metadata)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, space_id, folder_id, uploaded_by, name, type, mime_type, size, hash, metadata, deleted_at, deleted_by, created_at, updated_at
 `
 
 type CreateAssetParams struct {
-	GalleryID  int64  `json:"gallery_id"`
+	SpaceID    int64  `json:"space_id"`
+	FolderID   *int64 `json:"folder_id"`
 	UploadedBy *int64 `json:"uploaded_by"`
 	Name       string `json:"name"`
 	Type       string `json:"type"`
@@ -42,7 +72,8 @@ type CreateAssetParams struct {
 
 func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) (Asset, error) {
 	row := q.db.QueryRow(ctx, createAsset,
-		arg.GalleryID,
+		arg.SpaceID,
+		arg.FolderID,
 		arg.UploadedBy,
 		arg.Name,
 		arg.Type,
@@ -54,7 +85,8 @@ func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) (Asset
 	var i Asset
 	err := row.Scan(
 		&i.ID,
-		&i.GalleryID,
+		&i.SpaceID,
+		&i.FolderID,
 		&i.UploadedBy,
 		&i.Name,
 		&i.Type,
@@ -71,22 +103,22 @@ func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) (Asset
 }
 
 const filterAssetsByType = `-- name: FilterAssetsByType :many
-SELECT id, gallery_id, uploaded_by, name, type, mime_type, size, hash, metadata, deleted_at, deleted_by, created_at, updated_at FROM assets
-WHERE gallery_id = $1 AND deleted_at IS NULL AND type = $2
+SELECT id, space_id, folder_id, uploaded_by, name, type, mime_type, size, hash, metadata, deleted_at, deleted_by, created_at, updated_at FROM assets
+WHERE space_id = $1 AND deleted_at IS NULL AND type = $2
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4
 `
 
 type FilterAssetsByTypeParams struct {
-	GalleryID int64  `json:"gallery_id"`
-	Type      string `json:"type"`
-	Limit     int32  `json:"limit"`
-	Offset    int32  `json:"offset"`
+	SpaceID int64  `json:"space_id"`
+	Type    string `json:"type"`
+	Limit   int32  `json:"limit"`
+	Offset  int32  `json:"offset"`
 }
 
 func (q *Queries) FilterAssetsByType(ctx context.Context, arg FilterAssetsByTypeParams) ([]Asset, error) {
 	rows, err := q.db.Query(ctx, filterAssetsByType,
-		arg.GalleryID,
+		arg.SpaceID,
 		arg.Type,
 		arg.Limit,
 		arg.Offset,
@@ -100,7 +132,8 @@ func (q *Queries) FilterAssetsByType(ctx context.Context, arg FilterAssetsByType
 		var i Asset
 		if err := rows.Scan(
 			&i.ID,
-			&i.GalleryID,
+			&i.SpaceID,
+			&i.FolderID,
 			&i.UploadedBy,
 			&i.Name,
 			&i.Type,
@@ -123,22 +156,23 @@ func (q *Queries) FilterAssetsByType(ctx context.Context, arg FilterAssetsByType
 	return items, nil
 }
 
-const getActiveAssetByGalleryHash = `-- name: GetActiveAssetByGalleryHash :one
-SELECT id, gallery_id, uploaded_by, name, type, mime_type, size, hash, metadata, deleted_at, deleted_by, created_at, updated_at FROM assets
-WHERE gallery_id = $1 AND hash = $2 AND deleted_at IS NULL
+const getActiveAssetBySpaceHash = `-- name: GetActiveAssetBySpaceHash :one
+SELECT id, space_id, folder_id, uploaded_by, name, type, mime_type, size, hash, metadata, deleted_at, deleted_by, created_at, updated_at FROM assets
+WHERE space_id = $1 AND hash = $2 AND deleted_at IS NULL
 `
 
-type GetActiveAssetByGalleryHashParams struct {
-	GalleryID int64  `json:"gallery_id"`
-	Hash      string `json:"hash"`
+type GetActiveAssetBySpaceHashParams struct {
+	SpaceID int64  `json:"space_id"`
+	Hash    string `json:"hash"`
 }
 
-func (q *Queries) GetActiveAssetByGalleryHash(ctx context.Context, arg GetActiveAssetByGalleryHashParams) (Asset, error) {
-	row := q.db.QueryRow(ctx, getActiveAssetByGalleryHash, arg.GalleryID, arg.Hash)
+func (q *Queries) GetActiveAssetBySpaceHash(ctx context.Context, arg GetActiveAssetBySpaceHashParams) (Asset, error) {
+	row := q.db.QueryRow(ctx, getActiveAssetBySpaceHash, arg.SpaceID, arg.Hash)
 	var i Asset
 	err := row.Scan(
 		&i.ID,
-		&i.GalleryID,
+		&i.SpaceID,
+		&i.FolderID,
 		&i.UploadedBy,
 		&i.Name,
 		&i.Type,
@@ -155,7 +189,7 @@ func (q *Queries) GetActiveAssetByGalleryHash(ctx context.Context, arg GetActive
 }
 
 const getAssetByID = `-- name: GetAssetByID :one
-SELECT id, gallery_id, uploaded_by, name, type, mime_type, size, hash, metadata, deleted_at, deleted_by, created_at, updated_at FROM assets WHERE id = $1
+SELECT id, space_id, folder_id, uploaded_by, name, type, mime_type, size, hash, metadata, deleted_at, deleted_by, created_at, updated_at FROM assets WHERE id = $1
 `
 
 func (q *Queries) GetAssetByID(ctx context.Context, id uuid.UUID) (Asset, error) {
@@ -163,7 +197,8 @@ func (q *Queries) GetAssetByID(ctx context.Context, id uuid.UUID) (Asset, error)
 	var i Asset
 	err := row.Scan(
 		&i.ID,
-		&i.GalleryID,
+		&i.SpaceID,
+		&i.FolderID,
 		&i.UploadedBy,
 		&i.Name,
 		&i.Type,
@@ -188,21 +223,75 @@ func (q *Queries) HardDeleteAsset(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
-const listActiveAssetsByGallery = `-- name: ListActiveAssetsByGallery :many
-SELECT id, gallery_id, uploaded_by, name, type, mime_type, size, hash, metadata, deleted_at, deleted_by, created_at, updated_at FROM assets
-WHERE gallery_id = $1 AND deleted_at IS NULL
+const listActiveAssetsByFolder = `-- name: ListActiveAssetsByFolder :many
+SELECT id, space_id, folder_id, uploaded_by, name, type, mime_type, size, hash, metadata, deleted_at, deleted_by, created_at, updated_at FROM assets
+WHERE space_id = $1 AND folder_id = $2 AND deleted_at IS NULL
+ORDER BY created_at DESC
+LIMIT $3 OFFSET $4
+`
+
+type ListActiveAssetsByFolderParams struct {
+	SpaceID  int64  `json:"space_id"`
+	FolderID *int64 `json:"folder_id"`
+	Limit    int32  `json:"limit"`
+	Offset   int32  `json:"offset"`
+}
+
+func (q *Queries) ListActiveAssetsByFolder(ctx context.Context, arg ListActiveAssetsByFolderParams) ([]Asset, error) {
+	rows, err := q.db.Query(ctx, listActiveAssetsByFolder,
+		arg.SpaceID,
+		arg.FolderID,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Asset{}
+	for rows.Next() {
+		var i Asset
+		if err := rows.Scan(
+			&i.ID,
+			&i.SpaceID,
+			&i.FolderID,
+			&i.UploadedBy,
+			&i.Name,
+			&i.Type,
+			&i.MimeType,
+			&i.Size,
+			&i.Hash,
+			&i.Metadata,
+			&i.DeletedAt,
+			&i.DeletedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActiveAssetsBySpace = `-- name: ListActiveAssetsBySpace :many
+SELECT id, space_id, folder_id, uploaded_by, name, type, mime_type, size, hash, metadata, deleted_at, deleted_by, created_at, updated_at FROM assets
+WHERE space_id = $1 AND deleted_at IS NULL
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
 `
 
-type ListActiveAssetsByGalleryParams struct {
-	GalleryID int64 `json:"gallery_id"`
-	Limit     int32 `json:"limit"`
-	Offset    int32 `json:"offset"`
+type ListActiveAssetsBySpaceParams struct {
+	SpaceID int64 `json:"space_id"`
+	Limit   int32 `json:"limit"`
+	Offset  int32 `json:"offset"`
 }
 
-func (q *Queries) ListActiveAssetsByGallery(ctx context.Context, arg ListActiveAssetsByGalleryParams) ([]Asset, error) {
-	rows, err := q.db.Query(ctx, listActiveAssetsByGallery, arg.GalleryID, arg.Limit, arg.Offset)
+func (q *Queries) ListActiveAssetsBySpace(ctx context.Context, arg ListActiveAssetsBySpaceParams) ([]Asset, error) {
+	rows, err := q.db.Query(ctx, listActiveAssetsBySpace, arg.SpaceID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +301,8 @@ func (q *Queries) ListActiveAssetsByGallery(ctx context.Context, arg ListActiveA
 		var i Asset
 		if err := rows.Scan(
 			&i.ID,
-			&i.GalleryID,
+			&i.SpaceID,
+			&i.FolderID,
 			&i.UploadedBy,
 			&i.Name,
 			&i.Type,
@@ -235,21 +325,69 @@ func (q *Queries) ListActiveAssetsByGallery(ctx context.Context, arg ListActiveA
 	return items, nil
 }
 
-const listTrashedAssetsByGallery = `-- name: ListTrashedAssetsByGallery :many
-SELECT id, gallery_id, uploaded_by, name, type, mime_type, size, hash, metadata, deleted_at, deleted_by, created_at, updated_at FROM assets
-WHERE gallery_id = $1 AND deleted_at IS NOT NULL
+const listActiveRootAssets = `-- name: ListActiveRootAssets :many
+SELECT id, space_id, folder_id, uploaded_by, name, type, mime_type, size, hash, metadata, deleted_at, deleted_by, created_at, updated_at FROM assets
+WHERE space_id = $1 AND folder_id IS NULL AND deleted_at IS NULL
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListActiveRootAssetsParams struct {
+	SpaceID int64 `json:"space_id"`
+	Limit   int32 `json:"limit"`
+	Offset  int32 `json:"offset"`
+}
+
+func (q *Queries) ListActiveRootAssets(ctx context.Context, arg ListActiveRootAssetsParams) ([]Asset, error) {
+	rows, err := q.db.Query(ctx, listActiveRootAssets, arg.SpaceID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Asset{}
+	for rows.Next() {
+		var i Asset
+		if err := rows.Scan(
+			&i.ID,
+			&i.SpaceID,
+			&i.FolderID,
+			&i.UploadedBy,
+			&i.Name,
+			&i.Type,
+			&i.MimeType,
+			&i.Size,
+			&i.Hash,
+			&i.Metadata,
+			&i.DeletedAt,
+			&i.DeletedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTrashedAssetsBySpace = `-- name: ListTrashedAssetsBySpace :many
+SELECT id, space_id, folder_id, uploaded_by, name, type, mime_type, size, hash, metadata, deleted_at, deleted_by, created_at, updated_at FROM assets
+WHERE space_id = $1 AND deleted_at IS NOT NULL
 ORDER BY deleted_at DESC
 LIMIT $2 OFFSET $3
 `
 
-type ListTrashedAssetsByGalleryParams struct {
-	GalleryID int64 `json:"gallery_id"`
-	Limit     int32 `json:"limit"`
-	Offset    int32 `json:"offset"`
+type ListTrashedAssetsBySpaceParams struct {
+	SpaceID int64 `json:"space_id"`
+	Limit   int32 `json:"limit"`
+	Offset  int32 `json:"offset"`
 }
 
-func (q *Queries) ListTrashedAssetsByGallery(ctx context.Context, arg ListTrashedAssetsByGalleryParams) ([]Asset, error) {
-	rows, err := q.db.Query(ctx, listTrashedAssetsByGallery, arg.GalleryID, arg.Limit, arg.Offset)
+func (q *Queries) ListTrashedAssetsBySpace(ctx context.Context, arg ListTrashedAssetsBySpaceParams) ([]Asset, error) {
+	rows, err := q.db.Query(ctx, listTrashedAssetsBySpace, arg.SpaceID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -259,7 +397,8 @@ func (q *Queries) ListTrashedAssetsByGallery(ctx context.Context, arg ListTrashe
 		var i Asset
 		if err := rows.Scan(
 			&i.ID,
-			&i.GalleryID,
+			&i.SpaceID,
+			&i.FolderID,
 			&i.UploadedBy,
 			&i.Name,
 			&i.Type,
@@ -280,6 +419,39 @@ func (q *Queries) ListTrashedAssetsByGallery(ctx context.Context, arg ListTrashe
 		return nil, err
 	}
 	return items, nil
+}
+
+const moveAssetToFolder = `-- name: MoveAssetToFolder :one
+UPDATE assets SET folder_id = $2
+WHERE id = $1 AND deleted_at IS NULL
+RETURNING id, space_id, folder_id, uploaded_by, name, type, mime_type, size, hash, metadata, deleted_at, deleted_by, created_at, updated_at
+`
+
+type MoveAssetToFolderParams struct {
+	ID       uuid.UUID `json:"id"`
+	FolderID *int64    `json:"folder_id"`
+}
+
+func (q *Queries) MoveAssetToFolder(ctx context.Context, arg MoveAssetToFolderParams) (Asset, error) {
+	row := q.db.QueryRow(ctx, moveAssetToFolder, arg.ID, arg.FolderID)
+	var i Asset
+	err := row.Scan(
+		&i.ID,
+		&i.SpaceID,
+		&i.FolderID,
+		&i.UploadedBy,
+		&i.Name,
+		&i.Type,
+		&i.MimeType,
+		&i.Size,
+		&i.Hash,
+		&i.Metadata,
+		&i.DeletedAt,
+		&i.DeletedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const restoreAsset = `-- name: RestoreAsset :execrows
@@ -296,22 +468,22 @@ func (q *Queries) RestoreAsset(ctx context.Context, id uuid.UUID) (int64, error)
 }
 
 const searchAssetsByName = `-- name: SearchAssetsByName :many
-SELECT id, gallery_id, uploaded_by, name, type, mime_type, size, hash, metadata, deleted_at, deleted_by, created_at, updated_at FROM assets
-WHERE gallery_id = $1 AND deleted_at IS NULL AND name ILIKE $2
+SELECT id, space_id, folder_id, uploaded_by, name, type, mime_type, size, hash, metadata, deleted_at, deleted_by, created_at, updated_at FROM assets
+WHERE space_id = $1 AND deleted_at IS NULL AND name ILIKE $2
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4
 `
 
 type SearchAssetsByNameParams struct {
-	GalleryID int64  `json:"gallery_id"`
-	Name      string `json:"name"`
-	Limit     int32  `json:"limit"`
-	Offset    int32  `json:"offset"`
+	SpaceID int64  `json:"space_id"`
+	Name    string `json:"name"`
+	Limit   int32  `json:"limit"`
+	Offset  int32  `json:"offset"`
 }
 
 func (q *Queries) SearchAssetsByName(ctx context.Context, arg SearchAssetsByNameParams) ([]Asset, error) {
 	rows, err := q.db.Query(ctx, searchAssetsByName,
-		arg.GalleryID,
+		arg.SpaceID,
 		arg.Name,
 		arg.Limit,
 		arg.Offset,
@@ -325,7 +497,8 @@ func (q *Queries) SearchAssetsByName(ctx context.Context, arg SearchAssetsByName
 		var i Asset
 		if err := rows.Scan(
 			&i.ID,
-			&i.GalleryID,
+			&i.SpaceID,
+			&i.FolderID,
 			&i.UploadedBy,
 			&i.Name,
 			&i.Type,
@@ -369,7 +542,7 @@ func (q *Queries) SoftDeleteAsset(ctx context.Context, arg SoftDeleteAssetParams
 const updateAssetName = `-- name: UpdateAssetName :one
 UPDATE assets SET name = $2
 WHERE id = $1 AND deleted_at IS NULL
-RETURNING id, gallery_id, uploaded_by, name, type, mime_type, size, hash, metadata, deleted_at, deleted_by, created_at, updated_at
+RETURNING id, space_id, folder_id, uploaded_by, name, type, mime_type, size, hash, metadata, deleted_at, deleted_by, created_at, updated_at
 `
 
 type UpdateAssetNameParams struct {
@@ -382,7 +555,8 @@ func (q *Queries) UpdateAssetName(ctx context.Context, arg UpdateAssetNameParams
 	var i Asset
 	err := row.Scan(
 		&i.ID,
-		&i.GalleryID,
+		&i.SpaceID,
+		&i.FolderID,
 		&i.UploadedBy,
 		&i.Name,
 		&i.Type,

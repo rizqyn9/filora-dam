@@ -16,20 +16,20 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{q: db.New(pool)}
 }
 
-func (r *Repository) GalleryStats(ctx context.Context, galleryID int64) (GalleryStats, error) {
-	row, err := r.q.GalleryAssetStats(ctx, galleryID)
+func (r *Repository) SpaceStats(ctx context.Context, spaceID int64) (SpaceStats, error) {
+	row, err := r.q.SpaceAssetStats(ctx, spaceID)
 	if err != nil {
-		return GalleryStats{}, err
+		return SpaceStats{}, err
 	}
-	return GalleryStats{
+	return SpaceStats{
 		TotalAssets: row.TotalAssets,
 		TotalSize:   row.TotalSize,
 		UniqueTypes: row.TypeCount,
 	}, nil
 }
 
-func (r *Repository) TypeCounts(ctx context.Context, galleryID int64) ([]TypeCount, error) {
-	rows, err := r.q.GalleryAssetCountsByType(ctx, galleryID)
+func (r *Repository) TypeCounts(ctx context.Context, spaceID int64) ([]TypeCount, error) {
+	rows, err := r.q.SpaceAssetCountsByType(ctx, spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -40,8 +40,8 @@ func (r *Repository) TypeCounts(ctx context.Context, galleryID int64) ([]TypeCou
 	return out, nil
 }
 
-func (r *Repository) RecentAssets(ctx context.Context, galleryID int64, limit int32) ([]RecentAsset, error) {
-	rows, err := r.q.GalleryRecentAssets(ctx, db.GalleryRecentAssetsParams{GalleryID: galleryID, Limit: limit})
+func (r *Repository) RecentAssets(ctx context.Context, spaceID int64, limit int32) ([]RecentAsset, error) {
+	rows, err := r.q.SpaceRecentAssets(ctx, db.SpaceRecentAssetsParams{SpaceID: spaceID, Limit: limit})
 	if err != nil {
 		return nil, err
 	}

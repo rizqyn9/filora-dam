@@ -10,36 +10,36 @@ import (
 	"github.com/rizqynugroho9/filora-dam/api/internal/lib"
 )
 
-// GalleryAccess exposes gallery membership (implemented by gallery.Service).
-type GalleryAccess interface {
-	RoleOf(ctx context.Context, galleryID, userID int64) (string, bool, error)
+// Spaces exposes space membership (implemented by space.Service).
+type Spaces interface {
+	RoleOf(ctx context.Context, spaceID, userID int64) (string, bool, error)
 }
 
 type Service struct {
-	repo      *Repository
-	authz     *auth.Authorizer
-	galleries GalleryAccess
+	repo   *Repository
+	authz  *auth.Authorizer
+	spaces Spaces
 }
 
-func NewService(repo *Repository, authz *auth.Authorizer, galleries GalleryAccess) *Service {
-	return &Service{repo: repo, authz: authz, galleries: galleries}
+func NewService(repo *Repository, authz *auth.Authorizer, spaces Spaces) *Service {
+	return &Service{repo: repo, authz: authz, spaces: spaces}
 }
 
-func (s *Service) Create(ctx context.Context, userID, galleryID int64, in CreateTagInput) (Tag, error) {
+func (s *Service) Create(ctx context.Context, userID, spaceID int64, in CreateTagInput) (Tag, error) {
 	if err := lib.Validate(in); err != nil {
 		return Tag{}, err
 	}
-	if err := s.requireGalleryRole(ctx, userID, galleryID, "create", rankEditor); err != nil {
+	if err := s.requireSpaceRole(ctx, userID, spaceID, "create", rankEditor); err != nil {
 		return Tag{}, err
 	}
-	return s.repo.Create(ctx, galleryID, in.Name, &userID)
+	return s.repo.Create(ctx, spaceID, in.Name, &userID)
 }
 
-func (s *Service) ListByGallery(ctx context.Context, userID, galleryID int64) ([]Tag, error) {
-	if err := s.requireGalleryRole(ctx, userID, galleryID, "read", rankViewer); err != nil {
+func (s *Service) ListBySpace(ctx context.Context, userID, spaceID int64) ([]Tag, error) {
+	if err := s.requireSpaceRole(ctx, userID, spaceID, "read", rankViewer); err != nil {
 		return nil, err
 	}
-	return s.repo.ListByGallery(ctx, galleryID)
+	return s.repo.ListBySpace(ctx, spaceID)
 }
 
 func (s *Service) Update(ctx context.Context, userID, tagID int64, in UpdateTagInput) (Tag, error) {
@@ -50,7 +50,7 @@ func (s *Service) Update(ctx context.Context, userID, tagID int64, in UpdateTagI
 	if err != nil {
 		return Tag{}, err
 	}
-	if err := s.requireGalleryRole(ctx, userID, t.GalleryID, "update", rankEditor); err != nil {
+	if err := s.requireSpaceRole(ctx, userID, t.SpaceID, "update", rankEditor); err != nil {
 		return Tag{}, err
 	}
 	return s.repo.Update(ctx, tagID, in.Name)
@@ -61,7 +61,7 @@ func (s *Service) Delete(ctx context.Context, userID, tagID int64) error {
 	if err != nil {
 		return err
 	}
-	if err := s.requireGalleryRole(ctx, userID, t.GalleryID, "delete", rankEditor); err != nil {
+	if err := s.requireSpaceRole(ctx, userID, t.SpaceID, "delete", rankEditor); err != nil {
 		return err
 	}
 	return s.repo.Delete(ctx, tagID)
@@ -75,7 +75,7 @@ func (s *Service) Attach(ctx context.Context, userID, tagID int64, in AttachInpu
 	if err != nil {
 		return err
 	}
-	if err := s.requireGalleryRole(ctx, userID, t.GalleryID, "create", rankEditor); err != nil {
+	if err := s.requireSpaceRole(ctx, userID, t.SpaceID, "create", rankEditor); err != nil {
 		return err
 	}
 	assetID, err := uuid.Parse(in.AssetID)
@@ -90,7 +90,7 @@ func (s *Service) Detach(ctx context.Context, userID, tagID int64, assetID uuid.
 	if err != nil {
 		return err
 	}
-	if err := s.requireGalleryRole(ctx, userID, t.GalleryID, "delete", rankEditor); err != nil {
+	if err := s.requireSpaceRole(ctx, userID, t.SpaceID, "delete", rankEditor); err != nil {
 		return err
 	}
 	ok, err := s.repo.Detach(ctx, assetID, tagID)
@@ -111,9 +111,9 @@ func (s *Service) load(ctx context.Context, tagID int64) (Tag, error) {
 	return t, err
 }
 
-// requireGalleryRole enforces tag:<action> globally, then (own scope) a minimum
-// gallery membership role.
-func (s *Service) requireGalleryRole(ctx context.Context, userID, galleryID int64, action string, minRank int) error {
+// requireSpaceRole enforces tag:<action> globally, then (own scope) a minimum
+// space membership role.
+func (s *Service) requireSpaceRole(ctx context.Context, userID, spaceID int64, action string, minRank int) error {
 	dec, err := s.authz.Authorize(ctx, userID, "tag", action)
 	if err != nil {
 		return err
@@ -124,12 +124,12 @@ func (s *Service) requireGalleryRole(ctx context.Context, userID, galleryID int6
 	if dec.Scope == auth.ScopeAll {
 		return nil
 	}
-	role, ok, err := s.galleries.RoleOf(ctx, galleryID, userID)
+	role, ok, err := s.spaces.RoleOf(ctx, spaceID, userID)
 	if err != nil {
 		return err
 	}
 	if !ok || rank(role) < minRank {
-		return lib.ErrForbidden("insufficient access to this gallery")
+		return lib.ErrForbidden("insufficient access to this space")
 	}
 	return nil
 }

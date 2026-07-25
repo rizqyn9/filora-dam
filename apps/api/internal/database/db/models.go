@@ -272,33 +272,6 @@ func (ns NullStorageLayer) Value() (driver.Value, error) {
 	return string(ns.StorageLayer), nil
 }
 
-type Album struct {
-	ID           int64       `json:"id"`
-	GalleryID    int64       `json:"gallery_id"`
-	OwnerID      int64       `json:"owner_id"`
-	Name         string      `json:"name"`
-	Description  *string     `json:"description"`
-	CoverAssetID pgtype.UUID `json:"cover_asset_id"`
-	CreatedAt    time.Time   `json:"created_at"`
-	UpdatedAt    time.Time   `json:"updated_at"`
-}
-
-type AlbumAsset struct {
-	AlbumID   int64     `json:"album_id"`
-	AssetID   uuid.UUID `json:"asset_id"`
-	AddedBy   *int64    `json:"added_by"`
-	SortOrder int32     `json:"sort_order"`
-	CreatedAt time.Time `json:"created_at"`
-}
-
-type AlbumMember struct {
-	AlbumID   int64      `json:"album_id"`
-	UserID    int64      `json:"user_id"`
-	Role      MemberRole `json:"role"`
-	InvitedBy *int64     `json:"invited_by"`
-	CreatedAt time.Time  `json:"created_at"`
-}
-
 type ArchiveSyncJob struct {
 	ID          int64              `json:"id"`
 	AssetID     uuid.UUID          `json:"asset_id"`
@@ -315,7 +288,8 @@ type ArchiveSyncJob struct {
 
 type Asset struct {
 	ID         uuid.UUID          `json:"id"`
-	GalleryID  int64              `json:"gallery_id"`
+	SpaceID    int64              `json:"space_id"`
+	FolderID   *int64             `json:"folder_id"`
 	UploadedBy *int64             `json:"uploaded_by"`
 	Name       string             `json:"name"`
 	Type       string             `json:"type"`
@@ -358,30 +332,20 @@ type CliSession struct {
 	CreatedAt  time.Time          `json:"created_at"`
 }
 
-type Gallery struct {
-	ID           int64     `json:"id"`
-	OwnerID      int64     `json:"owner_id"`
-	Name         string    `json:"name"`
-	Description  *string   `json:"description"`
-	IsDefault    bool      `json:"is_default"`
-	StorageQuota int64     `json:"storage_quota"`
-	StorageUsed  int64     `json:"storage_used"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
-}
-
-type GalleryMember struct {
-	GalleryID int64      `json:"gallery_id"`
-	UserID    int64      `json:"user_id"`
-	Role      MemberRole `json:"role"`
-	InvitedBy *int64     `json:"invited_by"`
-	CreatedAt time.Time  `json:"created_at"`
+type Folder struct {
+	ID        int64     `json:"id"`
+	SpaceID   int64     `json:"space_id"`
+	ParentID  *int64    `json:"parent_id"`
+	OwnerID   int64     `json:"owner_id"`
+	Name      string    `json:"name"`
+	Path      string    `json:"path"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type Invitation struct {
 	ID             int64              `json:"id"`
-	GalleryID      *int64             `json:"gallery_id"`
-	AlbumID        *int64             `json:"album_id"`
+	SpaceID        int64              `json:"space_id"`
 	Email          string             `json:"email"`
 	Role           MemberRole         `json:"role"`
 	Token          string             `json:"token"`
@@ -417,6 +381,26 @@ type RolePermission struct {
 	PermissionID int64           `json:"permission_id"`
 	Scope        PermissionScope `json:"scope"`
 	CreatedAt    time.Time       `json:"created_at"`
+}
+
+type Space struct {
+	ID           int64     `json:"id"`
+	OwnerID      int64     `json:"owner_id"`
+	Name         string    `json:"name"`
+	Description  *string   `json:"description"`
+	IsDefault    bool      `json:"is_default"`
+	StorageQuota int64     `json:"storage_quota"`
+	StorageUsed  int64     `json:"storage_used"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+type SpaceMember struct {
+	SpaceID   int64      `json:"space_id"`
+	UserID    int64      `json:"user_id"`
+	Role      MemberRole `json:"role"`
+	InvitedBy *int64     `json:"invited_by"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 type StorageAccountUsage struct {
@@ -463,7 +447,7 @@ type StorageProvider struct {
 
 type Tag struct {
 	ID        int64     `json:"id"`
-	GalleryID int64     `json:"gallery_id"`
+	SpaceID   int64     `json:"space_id"`
 	Name      string    `json:"name"`
 	CreatedBy *int64    `json:"created_by"`
 	CreatedAt time.Time `json:"created_at"`

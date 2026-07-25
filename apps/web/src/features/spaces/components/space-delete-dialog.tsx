@@ -9,30 +9,30 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useDeleteGallery } from "@/features/galleries/api";
-import type { Gallery } from "@/features/galleries/schemas";
+import { useDeleteSpace } from "@/features/spaces/api";
+import type { Space } from "@/features/spaces/schemas";
 import { ApiError } from "@/lib/api-client";
 
-interface GalleryDeleteDialogProps {
-  gallery: Gallery;
+interface SpaceDeleteDialogProps {
+  space: Space;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
 /**
- * Confirmation dialog for deleting a gallery. Wired to the delete mutation.
+ * Confirmation dialog for deleting a space.
  */
-export function GalleryDeleteDialog({
-  gallery,
+export function SpaceDeleteDialog({
+  space,
   open,
   onOpenChange,
-}: GalleryDeleteDialogProps) {
-  const deleteGallery = useDeleteGallery();
+}: SpaceDeleteDialogProps) {
+  const deleteSpace = useDeleteSpace();
 
   const confirm = () => {
-    deleteGallery.mutate(gallery.id, {
+    deleteSpace.mutate(space.id, {
       onSuccess: () => {
-        toast.success(`Gallery "${gallery.name}" deleted`);
+        toast.success(`Space "${space.name}" deleted`);
         onOpenChange(false);
       },
       onError: (error) => {
@@ -47,26 +47,26 @@ export function GalleryDeleteDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Delete gallery</DialogTitle>
+          <DialogTitle>Delete space</DialogTitle>
           <DialogDescription>
-            This permanently deletes <strong>{gallery.name}</strong> and all of
-            its assets. This action cannot be undone.
+            This permanently deletes <strong>{space.name}</strong> and all of
+            its files and folders. This action cannot be undone.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
-            disabled={deleteGallery.isPending}
+            disabled={deleteSpace.isPending}
           >
             Cancel
           </Button>
           <Button
             variant="destructive"
             onClick={confirm}
-            disabled={deleteGallery.isPending}
+            disabled={deleteSpace.isPending}
           >
-            {deleteGallery.isPending ? "Deleting..." : "Delete"}
+            {deleteSpace.isPending ? "Deleting..." : "Delete"}
           </Button>
         </DialogFooter>
       </DialogContent>

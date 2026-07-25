@@ -18,20 +18,20 @@ func NewHandler(svc *Service) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(router fiber.Router, authMW fiber.Handler) {
-	router.Get("/galleries/:galleryId/dashboard", authMW, h.gallery)
+	router.Get("/spaces/:spaceId/dashboard", authMW, h.space)
 	router.Get("/dashboard/system", authMW, h.system)
 }
 
-func (h *Handler) gallery(c fiber.Ctx) error {
+func (h *Handler) space(c fiber.Ctx) error {
 	p := auth.MustPrincipal(c)
 	if p == nil {
 		return lib.ErrUnauthorized("not authenticated")
 	}
-	galleryID, err := strconv.ParseInt(c.Params("galleryId"), 10, 64)
+	spaceID, err := strconv.ParseInt(c.Params("spaceId"), 10, 64)
 	if err != nil {
-		return lib.ErrBadRequest("invalid galleryId")
+		return lib.ErrBadRequest("invalid spaceId")
 	}
-	dash, err := h.svc.Gallery(c.Context(), p.UserID, galleryID)
+	dash, err := h.svc.Space(c.Context(), p.UserID, spaceID)
 	if err != nil {
 		return err
 	}

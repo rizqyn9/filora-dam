@@ -14,43 +14,42 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useCreateGallery, useUpdateGallery } from "@/features/galleries/api";
-import type { Gallery } from "@/features/galleries/schemas";
+import { useCreateSpace, useUpdateSpace } from "@/features/spaces/api";
+import type { Space } from "@/features/spaces/schemas";
 import { ApiError } from "@/lib/api-client";
 
-interface GalleryFormDialogProps {
+interface SpaceFormDialogProps {
   /** Optional trigger. Omit when driving `open` externally (e.g. row menu). */
   trigger?: ReactNode;
   /** Present = edit mode; absent = create mode. */
-  gallery?: Gallery;
+  space?: Space;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }
 
 /**
- * Create / edit a gallery. Works both trigger-based and fully controlled.
- * Wired to the gallery create/update mutations.
+ * Create / edit a space. Works both trigger-based and fully controlled.
  */
-export function GalleryFormDialog({
+export function SpaceFormDialog({
   trigger,
-  gallery,
+  space,
   open,
   onOpenChange,
-}: GalleryFormDialogProps) {
-  const isEdit = gallery !== undefined;
-  const [name, setName] = useState(gallery?.name ?? "");
-  const [description, setDescription] = useState(gallery?.description ?? "");
+}: SpaceFormDialogProps) {
+  const isEdit = space !== undefined;
+  const [name, setName] = useState(space?.name ?? "");
+  const [description, setDescription] = useState(space?.description ?? "");
 
-  const createGallery = useCreateGallery();
-  const updateGallery = useUpdateGallery(gallery?.id ?? 0);
-  const mutation = isEdit ? updateGallery : createGallery;
+  const createSpace = useCreateSpace();
+  const updateSpace = useUpdateSpace(space?.id ?? 0);
+  const mutation = isEdit ? updateSpace : createSpace;
 
   useEffect(() => {
     if (open) {
-      setName(gallery?.name ?? "");
-      setDescription(gallery?.description ?? "");
+      setName(space?.name ?? "");
+      setDescription(space?.description ?? "");
     }
-  }, [open, gallery]);
+  }, [open, space]);
 
   const submit = () => {
     const trimmed = name.trim();
@@ -63,7 +62,7 @@ export function GalleryFormDialog({
 
     mutation.mutate(input, {
       onSuccess: () => {
-        toast.success(isEdit ? "Gallery updated" : `Gallery "${trimmed}" created`);
+        toast.success(isEdit ? "Space updated" : `Space "${trimmed}" created`);
         onOpenChange?.(false);
       },
       onError: (error) => {
@@ -79,30 +78,30 @@ export function GalleryFormDialog({
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit gallery" : "Create gallery"}</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit space" : "Create space"}</DialogTitle>
           <DialogDescription>
-            Galleries group your assets, members, and storage together.
+            Spaces group your files, members, and storage together.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="gallery-name">Name</Label>
+            <Label htmlFor="space-name">Name</Label>
             <Input
-              id="gallery-name"
+              id="space-name"
               value={name}
               maxLength={255}
-              placeholder="e.g. Marketing 2026"
+              placeholder="e.g. Family Photos"
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && submit()}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="gallery-description">Description</Label>
+            <Label htmlFor="space-description">Description</Label>
             <Textarea
-              id="gallery-description"
+              id="space-description"
               value={description}
               maxLength={1000}
-              placeholder="What's this gallery for? (optional)"
+              placeholder="What's this space for? (optional)"
               onChange={(e) => setDescription(e.target.value)}
             />
           </div>

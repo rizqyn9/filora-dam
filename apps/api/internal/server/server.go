@@ -11,12 +11,12 @@ import (
 	"github.com/rizqynugroho9/filora-dam/api/internal/database"
 	"github.com/rizqynugroho9/filora-dam/api/internal/lib"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/account"
-	"github.com/rizqynugroho9/filora-dam/api/internal/modules/album"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/asset"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/dashboard"
-	"github.com/rizqynugroho9/filora-dam/api/internal/modules/gallery"
+	"github.com/rizqynugroho9/filora-dam/api/internal/modules/folder"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/rbac"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/session"
+	"github.com/rizqynugroho9/filora-dam/api/internal/modules/space"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/storage"
 	"github.com/rizqynugroho9/filora-dam/api/internal/modules/tag"
 )
@@ -30,8 +30,8 @@ type Deps struct {
 	Account   *account.Handler
 	RBAC      *rbac.Handler
 	Session   *session.Handler
-	Gallery   *gallery.Handler
-	Album     *album.Handler
+	Space     *space.Handler
+	Folder    *folder.Handler
 	Tag       *tag.Handler
 	Storage   *storage.Handler
 	Asset     *asset.Handler

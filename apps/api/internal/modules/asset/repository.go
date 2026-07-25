@@ -23,9 +23,10 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{q: db.New(pool)}
 }
 
-func (r *Repository) Create(ctx context.Context, galleryID int64, uploadedBy *int64, name, typ, mime string, size int64, hash string) (Asset, error) {
+func (r *Repository) Create(ctx context.Context, spaceID int64, folderID *int64, uploadedBy *int64, name, typ, mime string, size int64, hash string) (Asset, error) {
 	a, err := r.q.CreateAsset(ctx, db.CreateAssetParams{
-		GalleryID:  galleryID,
+		SpaceID:    spaceID,
+		FolderID:   folderID,
 		UploadedBy: uploadedBy,
 		Name:       name,
 		Type:       typ,
@@ -51,8 +52,8 @@ func (r *Repository) GetByID(ctx context.Context, id uuid.UUID) (Asset, error) {
 	return toAsset(a), nil
 }
 
-func (r *Repository) GetActiveByHash(ctx context.Context, galleryID int64, hash string) (Asset, error) {
-	a, err := r.q.GetActiveAssetByGalleryHash(ctx, db.GetActiveAssetByGalleryHashParams{GalleryID: galleryID, Hash: hash})
+func (r *Repository) GetActiveByHash(ctx context.Context, spaceID int64, hash string) (Asset, error) {
+	a, err := r.q.GetActiveAssetBySpaceHash(ctx, db.GetActiveAssetBySpaceHashParams{SpaceID: spaceID, Hash: hash})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Asset{}, ErrAssetNotFound
 	}
@@ -62,36 +63,60 @@ func (r *Repository) GetActiveByHash(ctx context.Context, galleryID int64, hash 
 	return toAsset(a), nil
 }
 
-func (r *Repository) ListActive(ctx context.Context, galleryID int64, limit, offset int32) ([]Asset, error) {
-	rows, err := r.q.ListActiveAssetsByGallery(ctx, db.ListActiveAssetsByGalleryParams{GalleryID: galleryID, Limit: limit, Offset: offset})
+func (r *Repository) ListActive(ctx context.Context, spaceID int64, limit, offset int32) ([]Asset, error) {
+	rows, err := r.q.ListActiveAssetsBySpace(ctx, db.ListActiveAssetsBySpaceParams{SpaceID: spaceID, Limit: limit, Offset: offset})
 	if err != nil {
 		return nil, err
 	}
 	return toAssets(rows), nil
 }
 
-func (r *Repository) CountActive(ctx context.Context, galleryID int64) (int64, error) {
-	return r.q.CountActiveAssetsByGallery(ctx, galleryID)
-}
-
-func (r *Repository) Search(ctx context.Context, galleryID int64, pattern string, limit, offset int32) ([]Asset, error) {
-	rows, err := r.q.SearchAssetsByName(ctx, db.SearchAssetsByNameParams{GalleryID: galleryID, Name: pattern, Limit: limit, Offset: offset})
+func (r *Repository) ListByFolder(ctx context.Context, spaceID int64, folderID *int64, limit, offset int32) ([]Asset, error) {
+	rows, err := r.q.ListActiveAssetsByFolder(ctx, db.ListActiveAssetsByFolderParams{SpaceID: spaceID, FolderID: folderID, Limit: limit, Offset: offset})
 	if err != nil {
 		return nil, err
 	}
 	return toAssets(rows), nil
 }
 
-func (r *Repository) FilterByType(ctx context.Context, galleryID int64, typ string, limit, offset int32) ([]Asset, error) {
-	rows, err := r.q.FilterAssetsByType(ctx, db.FilterAssetsByTypeParams{GalleryID: galleryID, Type: typ, Limit: limit, Offset: offset})
+func (r *Repository) ListRootAssets(ctx context.Context, spaceID int64, limit, offset int32) ([]Asset, error) {
+	rows, err := r.q.ListActiveRootAssets(ctx, db.ListActiveRootAssetsParams{SpaceID: spaceID, Limit: limit, Offset: offset})
 	if err != nil {
 		return nil, err
 	}
 	return toAssets(rows), nil
 }
 
-func (r *Repository) ListTrashed(ctx context.Context, galleryID int64, limit, offset int32) ([]Asset, error) {
-	rows, err := r.q.ListTrashedAssetsByGallery(ctx, db.ListTrashedAssetsByGalleryParams{GalleryID: galleryID, Limit: limit, Offset: offset})
+func (r *Repository) CountActive(ctx context.Context, spaceID int64) (int64, error) {
+	return r.q.CountActiveAssetsBySpace(ctx, spaceID)
+}
+
+func (r *Repository) CountByFolder(ctx context.Context, spaceID int64, folderID *int64) (int64, error) {
+	return r.q.CountActiveAssetsByFolder(ctx, db.CountActiveAssetsByFolderParams{SpaceID: spaceID, FolderID: folderID})
+}
+
+func (r *Repository) CountRoot(ctx context.Context, spaceID int64) (int64, error) {
+	return r.q.CountActiveRootAssets(ctx, spaceID)
+}
+
+func (r *Repository) Search(ctx context.Context, spaceID int64, pattern string, limit, offset int32) ([]Asset, error) {
+	rows, err := r.q.SearchAssetsByName(ctx, db.SearchAssetsByNameParams{SpaceID: spaceID, Name: pattern, Limit: limit, Offset: offset})
+	if err != nil {
+		return nil, err
+	}
+	return toAssets(rows), nil
+}
+
+func (r *Repository) FilterByType(ctx context.Context, spaceID int64, typ string, limit, offset int32) ([]Asset, error) {
+	rows, err := r.q.FilterAssetsByType(ctx, db.FilterAssetsByTypeParams{SpaceID: spaceID, Type: typ, Limit: limit, Offset: offset})
+	if err != nil {
+		return nil, err
+	}
+	return toAssets(rows), nil
+}
+
+func (r *Repository) ListTrashed(ctx context.Context, spaceID int64, limit, offset int32) ([]Asset, error) {
+	rows, err := r.q.ListTrashedAssetsBySpace(ctx, db.ListTrashedAssetsBySpaceParams{SpaceID: spaceID, Limit: limit, Offset: offset})
 	if err != nil {
 		return nil, err
 	}
@@ -100,6 +125,17 @@ func (r *Repository) ListTrashed(ctx context.Context, galleryID int64, limit, of
 
 func (r *Repository) UpdateName(ctx context.Context, id uuid.UUID, name string) (Asset, error) {
 	a, err := r.q.UpdateAssetName(ctx, db.UpdateAssetNameParams{ID: id, Name: name})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Asset{}, ErrAssetNotFound
+	}
+	if err != nil {
+		return Asset{}, err
+	}
+	return toAsset(a), nil
+}
+
+func (r *Repository) MoveToFolder(ctx context.Context, id uuid.UUID, folderID *int64) (Asset, error) {
+	a, err := r.q.MoveAssetToFolder(ctx, db.MoveAssetToFolderParams{ID: id, FolderID: folderID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Asset{}, ErrAssetNotFound
 	}
@@ -134,7 +170,8 @@ func toAssets(rows []db.Asset) []Asset {
 func toAsset(a db.Asset) Asset {
 	return Asset{
 		ID:         a.ID,
-		GalleryID:  a.GalleryID,
+		SpaceID:    a.SpaceID,
+		FolderID:   a.FolderID,
 		UploadedBy: a.UploadedBy,
 		Name:       a.Name,
 		Type:       a.Type,

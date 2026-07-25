@@ -11,7 +11,8 @@ import (
 // Asset is the domain view of an asset.
 type Asset struct {
 	ID         uuid.UUID       `json:"id"`
-	GalleryID  int64           `json:"gallery_id"`
+	SpaceID    int64           `json:"space_id"`
+	FolderID   *int64          `json:"folder_id,omitempty"`
 	UploadedBy *int64          `json:"uploaded_by,omitempty"`
 	Name       string          `json:"name"`
 	Type       string          `json:"type"`
@@ -26,18 +27,24 @@ type Asset struct {
 
 // UploadInput carries a validated file ready to be stored.
 type UploadInput struct {
-	GalleryID int64
-	Name      string
-	Type      string
-	MimeType  string
-	Size      int64
-	Hash      string
-	Reader    io.Reader
+	SpaceID  int64
+	FolderID *int64
+	Name     string
+	Type     string
+	MimeType string
+	Size     int64
+	Hash     string
+	Reader   io.Reader
 }
 
 // UpdateAssetInput updates editable metadata.
 type UpdateAssetInput struct {
 	Name string `json:"name" validate:"required,min=1,max=500"`
+}
+
+// MoveAssetInput moves an asset to a different folder.
+type MoveAssetInput struct {
+	FolderID *int64 `json:"folder_id"` // NULL = move to root
 }
 
 // ListResult is a paginated list of assets.

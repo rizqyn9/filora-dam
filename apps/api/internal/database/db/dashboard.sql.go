@@ -40,28 +40,28 @@ func (q *Queries) ArchiveJobHealth(ctx context.Context) (ArchiveJobHealthRow, er
 	return i, err
 }
 
-const galleryAssetCountsByType = `-- name: GalleryAssetCountsByType :many
+const spaceAssetCountsByType = `-- name: SpaceAssetCountsByType :many
 SELECT type, count(*) AS count
 FROM assets
-WHERE gallery_id = $1 AND deleted_at IS NULL
+WHERE space_id = $1 AND deleted_at IS NULL
 GROUP BY type
 ORDER BY count DESC
 `
 
-type GalleryAssetCountsByTypeRow struct {
+type SpaceAssetCountsByTypeRow struct {
 	Type  string `json:"type"`
 	Count int64  `json:"count"`
 }
 
-func (q *Queries) GalleryAssetCountsByType(ctx context.Context, galleryID int64) ([]GalleryAssetCountsByTypeRow, error) {
-	rows, err := q.db.Query(ctx, galleryAssetCountsByType, galleryID)
+func (q *Queries) SpaceAssetCountsByType(ctx context.Context, spaceID int64) ([]SpaceAssetCountsByTypeRow, error) {
+	rows, err := q.db.Query(ctx, spaceAssetCountsByType, spaceID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []GalleryAssetCountsByTypeRow{}
+	items := []SpaceAssetCountsByTypeRow{}
 	for rows.Next() {
-		var i GalleryAssetCountsByTypeRow
+		var i SpaceAssetCountsByTypeRow
 		if err := rows.Scan(&i.Type, &i.Count); err != nil {
 			return nil, err
 		}
@@ -73,42 +73,42 @@ func (q *Queries) GalleryAssetCountsByType(ctx context.Context, galleryID int64)
 	return items, nil
 }
 
-const galleryAssetStats = `-- name: GalleryAssetStats :one
+const spaceAssetStats = `-- name: SpaceAssetStats :one
 SELECT
     count(*)                        AS total_assets,
     COALESCE(sum(size), 0)::bigint  AS total_size,
     count(DISTINCT type)            AS type_count
 FROM assets
-WHERE gallery_id = $1 AND deleted_at IS NULL
+WHERE space_id = $1 AND deleted_at IS NULL
 `
 
-type GalleryAssetStatsRow struct {
+type SpaceAssetStatsRow struct {
 	TotalAssets int64 `json:"total_assets"`
 	TotalSize   int64 `json:"total_size"`
 	TypeCount   int64 `json:"type_count"`
 }
 
-func (q *Queries) GalleryAssetStats(ctx context.Context, galleryID int64) (GalleryAssetStatsRow, error) {
-	row := q.db.QueryRow(ctx, galleryAssetStats, galleryID)
-	var i GalleryAssetStatsRow
+func (q *Queries) SpaceAssetStats(ctx context.Context, spaceID int64) (SpaceAssetStatsRow, error) {
+	row := q.db.QueryRow(ctx, spaceAssetStats, spaceID)
+	var i SpaceAssetStatsRow
 	err := row.Scan(&i.TotalAssets, &i.TotalSize, &i.TypeCount)
 	return i, err
 }
 
-const galleryRecentAssets = `-- name: GalleryRecentAssets :many
+const spaceRecentAssets = `-- name: SpaceRecentAssets :many
 SELECT id, name, type, mime_type, size, created_at
 FROM assets
-WHERE gallery_id = $1 AND deleted_at IS NULL
+WHERE space_id = $1 AND deleted_at IS NULL
 ORDER BY created_at DESC
 LIMIT $2
 `
 
-type GalleryRecentAssetsParams struct {
-	GalleryID int64 `json:"gallery_id"`
-	Limit     int32 `json:"limit"`
+type SpaceRecentAssetsParams struct {
+	SpaceID int64 `json:"space_id"`
+	Limit   int32 `json:"limit"`
 }
 
-type GalleryRecentAssetsRow struct {
+type SpaceRecentAssetsRow struct {
 	ID        uuid.UUID `json:"id"`
 	Name      string    `json:"name"`
 	Type      string    `json:"type"`
@@ -117,15 +117,15 @@ type GalleryRecentAssetsRow struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-func (q *Queries) GalleryRecentAssets(ctx context.Context, arg GalleryRecentAssetsParams) ([]GalleryRecentAssetsRow, error) {
-	rows, err := q.db.Query(ctx, galleryRecentAssets, arg.GalleryID, arg.Limit)
+func (q *Queries) SpaceRecentAssets(ctx context.Context, arg SpaceRecentAssetsParams) ([]SpaceRecentAssetsRow, error) {
+	rows, err := q.db.Query(ctx, spaceRecentAssets, arg.SpaceID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []GalleryRecentAssetsRow{}
+	items := []SpaceRecentAssetsRow{}
 	for rows.Next() {
-		var i GalleryRecentAssetsRow
+		var i SpaceRecentAssetsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,

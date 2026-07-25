@@ -33,8 +33,8 @@ The canonical schema lives at `apps/api/internal/database/schema.sql`. If these 
 Identity & Access    users, roles, permissions, role_permissions,
                      user_roles, cli_sessions, clerk_webhook_events
 
-Organization         galleries, gallery_members, albums, album_members,
-                     invitations, album_assets, tags, asset_tags
+Organization         spaces, space_members, folders, invitations,
+                     tags, asset_tags
 
 Assets               assets
 

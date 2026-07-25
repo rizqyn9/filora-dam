@@ -1,4 +1,4 @@
-package gallery
+package space
 
 import (
 	"testing"

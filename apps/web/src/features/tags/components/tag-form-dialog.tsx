@@ -53,7 +53,7 @@ export function TagFormDialog({
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit tag" : "Create tag"}</DialogTitle>
           <DialogDescription>
-            Tags help you filter and group assets within a gallery.
+            Tags help you filter and group assets within a space.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2 py-2">

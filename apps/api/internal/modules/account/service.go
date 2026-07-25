@@ -8,10 +8,10 @@ import (
 	"github.com/rizqynugroho9/filora-dam/api/internal/lib"
 )
 
-// Provisioner sets up per-user resources on first sync (e.g. default gallery).
-// Implemented by the gallery service; injected via SetProvisioner.
+// Provisioner sets up per-user resources on first sync (e.g. default space).
+// Implemented by the space service; injected via SetProvisioner.
 type Provisioner interface {
-	EnsureDefaultGallery(ctx context.Context, userID int64) error
+	EnsureDefaultSpace(ctx context.Context, userID int64) error
 }
 
 // Service holds user business logic.
@@ -59,8 +59,8 @@ func (s *Service) SyncFromClerk(ctx context.Context, id auth.ClerkIdentity) (*Us
 		return nil, err
 	}
 	if s.provisioner != nil {
-		// Best-effort: ensure the user has a default gallery. Idempotent.
-		_ = s.provisioner.EnsureDefaultGallery(ctx, u.ID)
+		// Best-effort: ensure the user has a default space. Idempotent.
+		_ = s.provisioner.EnsureDefaultSpace(ctx, u.ID)
 	}
 	return u, nil
 }

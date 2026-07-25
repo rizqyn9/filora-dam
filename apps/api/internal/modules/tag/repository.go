@@ -21,8 +21,8 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{q: db.New(pool)}
 }
 
-func (r *Repository) Create(ctx context.Context, galleryID int64, name string, createdBy *int64) (Tag, error) {
-	t, err := r.q.CreateTag(ctx, db.CreateTagParams{GalleryID: galleryID, Name: name, CreatedBy: createdBy})
+func (r *Repository) Create(ctx context.Context, spaceID int64, name string, createdBy *int64) (Tag, error) {
+	t, err := r.q.CreateTag(ctx, db.CreateTagParams{SpaceID: spaceID, Name: name, CreatedBy: createdBy})
 	if err != nil {
 		return Tag{}, err
 	}
@@ -40,8 +40,8 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (Tag, error) {
 	return toTag(t), nil
 }
 
-func (r *Repository) ListByGallery(ctx context.Context, galleryID int64) ([]Tag, error) {
-	rows, err := r.q.ListTagsByGallery(ctx, galleryID)
+func (r *Repository) ListBySpace(ctx context.Context, spaceID int64) ([]Tag, error) {
+	rows, err := r.q.ListTagsBySpace(ctx, spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func (r *Repository) Detach(ctx context.Context, assetID uuid.UUID, tagID int64)
 func toTag(t db.Tag) Tag {
 	return Tag{
 		ID:        t.ID,
-		GalleryID: t.GalleryID,
+		SpaceID:   t.SpaceID,
 		Name:      t.Name,
 		CreatedAt: t.CreatedAt,
 		UpdatedAt: t.UpdatedAt,

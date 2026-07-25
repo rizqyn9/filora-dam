@@ -6,14 +6,14 @@ import (
 	"github.com/google/uuid"
 )
 
-// GalleryDashboard is the per-gallery summary.
-type GalleryDashboard struct {
-	Stats      GalleryStats  `json:"stats"`
+// SpaceDashboard is the per-space summary.
+type SpaceDashboard struct {
+	Stats      SpaceStats    `json:"stats"`
 	TypeCounts []TypeCount   `json:"type_counts"`
 	Recent     []RecentAsset `json:"recent_assets"`
 }
 
-type GalleryStats struct {
+type SpaceStats struct {
 	TotalAssets  int64 `json:"total_assets"`
 	TotalSize    int64 `json:"total_size"`
 	UniqueTypes  int64 `json:"unique_types"`

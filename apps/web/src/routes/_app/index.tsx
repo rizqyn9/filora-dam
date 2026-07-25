@@ -62,7 +62,7 @@ function DashboardPage() {
         />
         <StatCard
           label="Galleries"
-          value={summary.galleries}
+          value={summary.spaces}
           icon={Images}
           delta="+2"
           hint="new this month"

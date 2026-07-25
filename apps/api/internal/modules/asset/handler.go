@@ -20,16 +20,20 @@ func NewHandler(svc *Service) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(router fiber.Router, authMW fiber.Handler) {
-	g := router.Group("/galleries/:galleryId/assets", authMW)
+	// Space-scoped asset operations.
+	g := router.Group("/spaces/:spaceId/assets", authMW)
 	g.Post("/", h.upload)
 	g.Get("/", h.list)
+	g.Get("/all", h.listAll)
 	g.Get("/search", h.search)
 	g.Get("/trash", h.trash)
 	g.Get("/filter/:type", h.filterByType)
 
+	// Asset-scoped operations.
 	a := router.Group("/assets", authMW)
 	a.Get("/:id", h.get)
 	a.Patch("/:id", h.update)
+	a.Post("/:id/move", h.move)
 	a.Delete("/:id", h.delete)
 	a.Post("/:id/restore", h.restore)
 	a.Get("/:id/download", h.download)
@@ -40,9 +44,19 @@ func (h *Handler) upload(c fiber.Ctx) error {
 	if p == nil {
 		return lib.ErrUnauthorized("not authenticated")
 	}
-	galleryID, err := paramInt64(c, "galleryId")
+	spaceID, err := paramInt64(c, "spaceId")
 	if err != nil {
 		return err
+	}
+
+	// Optional folder_id from form field.
+	var folderID *int64
+	if fid := c.FormValue("folder_id"); fid != "" {
+		v, err := strconv.ParseInt(fid, 10, 64)
+		if err != nil {
+			return lib.ErrBadRequest("invalid folder_id")
+		}
+		folderID = &v
 	}
 
 	fh, err := c.FormFile("file")
@@ -71,13 +85,14 @@ func (h *Handler) upload(c fiber.Ctx) error {
 	}
 
 	a, err := h.svc.Upload(c.Context(), p.UserID, UploadInput{
-		GalleryID: galleryID,
-		Name:      fh.Filename,
-		Type:      lib.ClassifyType(mime),
-		MimeType:  mime,
-		Size:      fh.Size,
-		Hash:      hash,
-		Reader:    f,
+		SpaceID:  spaceID,
+		FolderID: folderID,
+		Name:     fh.Filename,
+		Type:     lib.ClassifyType(mime),
+		MimeType: mime,
+		Size:     fh.Size,
+		Hash:     hash,
+		Reader:   f,
 	})
 	if err != nil {
 		return err
@@ -90,11 +105,38 @@ func (h *Handler) list(c fiber.Ctx) error {
 	if p == nil {
 		return lib.ErrUnauthorized("not authenticated")
 	}
-	galleryID, err := paramInt64(c, "galleryId")
+	spaceID, err := paramInt64(c, "spaceId")
 	if err != nil {
 		return err
 	}
-	res, err := h.svc.List(c.Context(), p.UserID, galleryID, lib.ParsePage(c))
+
+	// Optional folder_id query param. If absent, list root assets.
+	var folderID *int64
+	if fid := c.Query("folder_id"); fid != "" {
+		v, err := strconv.ParseInt(fid, 10, 64)
+		if err != nil {
+			return lib.ErrBadRequest("invalid folder_id")
+		}
+		folderID = &v
+	}
+
+	res, err := h.svc.List(c.Context(), p.UserID, spaceID, folderID, lib.ParsePage(c))
+	if err != nil {
+		return err
+	}
+	return lib.OK(c, res)
+}
+
+func (h *Handler) listAll(c fiber.Ctx) error {
+	p := auth.MustPrincipal(c)
+	if p == nil {
+		return lib.ErrUnauthorized("not authenticated")
+	}
+	spaceID, err := paramInt64(c, "spaceId")
+	if err != nil {
+		return err
+	}
+	res, err := h.svc.ListAll(c.Context(), p.UserID, spaceID, lib.ParsePage(c))
 	if err != nil {
 		return err
 	}
@@ -106,7 +148,7 @@ func (h *Handler) search(c fiber.Ctx) error {
 	if p == nil {
 		return lib.ErrUnauthorized("not authenticated")
 	}
-	galleryID, err := paramInt64(c, "galleryId")
+	spaceID, err := paramInt64(c, "spaceId")
 	if err != nil {
 		return err
 	}
@@ -114,7 +156,7 @@ func (h *Handler) search(c fiber.Ctx) error {
 	if q == "" {
 		return lib.ErrBadRequest("query parameter 'q' is required")
 	}
-	res, err := h.svc.Search(c.Context(), p.UserID, galleryID, q, lib.ParsePage(c))
+	res, err := h.svc.Search(c.Context(), p.UserID, spaceID, q, lib.ParsePage(c))
 	if err != nil {
 		return err
 	}
@@ -126,11 +168,11 @@ func (h *Handler) filterByType(c fiber.Ctx) error {
 	if p == nil {
 		return lib.ErrUnauthorized("not authenticated")
 	}
-	galleryID, err := paramInt64(c, "galleryId")
+	spaceID, err := paramInt64(c, "spaceId")
 	if err != nil {
 		return err
 	}
-	res, err := h.svc.FilterByType(c.Context(), p.UserID, galleryID, c.Params("type"), lib.ParsePage(c))
+	res, err := h.svc.FilterByType(c.Context(), p.UserID, spaceID, c.Params("type"), lib.ParsePage(c))
 	if err != nil {
 		return err
 	}
@@ -142,11 +184,11 @@ func (h *Handler) trash(c fiber.Ctx) error {
 	if p == nil {
 		return lib.ErrUnauthorized("not authenticated")
 	}
-	galleryID, err := paramInt64(c, "galleryId")
+	spaceID, err := paramInt64(c, "spaceId")
 	if err != nil {
 		return err
 	}
-	res, err := h.svc.Trash(c.Context(), p.UserID, galleryID, lib.ParsePage(c))
+	res, err := h.svc.Trash(c.Context(), p.UserID, spaceID, lib.ParsePage(c))
 	if err != nil {
 		return err
 	}
@@ -183,6 +225,26 @@ func (h *Handler) update(c fiber.Ctx) error {
 		return lib.ErrBadRequest("invalid request body").Wrap(err)
 	}
 	a, err := h.svc.UpdateName(c.Context(), p.UserID, id, in)
+	if err != nil {
+		return err
+	}
+	return lib.OK(c, a)
+}
+
+func (h *Handler) move(c fiber.Ctx) error {
+	p := auth.MustPrincipal(c)
+	if p == nil {
+		return lib.ErrUnauthorized("not authenticated")
+	}
+	id, err := paramUUID(c, "id")
+	if err != nil {
+		return err
+	}
+	var in MoveAssetInput
+	if err := c.Bind().Body(&in); err != nil {
+		return lib.ErrBadRequest("invalid request body").Wrap(err)
+	}
+	a, err := h.svc.Move(c.Context(), p.UserID, id, in)
 	if err != nil {
 		return err
 	}

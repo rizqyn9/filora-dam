@@ -1,9 +1,9 @@
-package gallery
+package space
 
 import "time"
 
-// Gallery is the domain view of a gallery.
-type Gallery struct {
+// Space is the domain view of a space (top-level container).
+type Space struct {
 	ID           int64     `json:"id"`
 	OwnerID      int64     `json:"owner_id"`
 	Name         string    `json:"name"`
@@ -15,7 +15,7 @@ type Gallery struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
-// Member is a gallery member with basic user info.
+// Member is a space member with basic user info.
 type Member struct {
 	UserID    int64     `json:"user_id"`
 	Role      string    `json:"role"`
@@ -25,10 +25,10 @@ type Member struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// Invitation is a pending/gallery invitation (token included for the owner to share).
+// Invitation is a pending space invitation (token included for the owner to share).
 type Invitation struct {
 	ID        int64      `json:"id"`
-	GalleryID *int64     `json:"gallery_id,omitempty"`
+	SpaceID   int64      `json:"space_id"`
 	Email     string     `json:"email"`
 	Role      string     `json:"role"`
 	Token     string     `json:"token"`
@@ -39,12 +39,12 @@ type Invitation struct {
 
 // --- inputs ---
 
-type CreateGalleryInput struct {
+type CreateSpaceInput struct {
 	Name        string  `json:"name" validate:"required,min=1,max=255"`
 	Description *string `json:"description" validate:"omitempty,max=1000"`
 }
 
-type UpdateGalleryInput struct {
+type UpdateSpaceInput struct {
 	Name        string  `json:"name" validate:"required,min=1,max=255"`
 	Description *string `json:"description" validate:"omitempty,max=1000"`
 }

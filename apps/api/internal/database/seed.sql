@@ -9,10 +9,11 @@
 --
 -- Note on layered authorization:
 --   * These global RBAC grants gate app-wide capability (who may create
---     galleries, manage storage accounts, administer users, etc.).
---   * Day-to-day access to a specific gallery/album is governed by the local
---     membership role (owner/editor/viewer) in gallery_members / album_members.
---   * 'own' scope on gallery/album/asset/tag = resources the user owns or is a
+--     spaces, manage storage accounts, administer users, etc.).
+--   * Day-to-day access to a specific space is governed by the local
+--     membership role (owner/editor/viewer) in space_members.
+--   * Folders inherit the space's membership — no separate folder-level grants.
+--   * 'own' scope on space/folder/asset/tag = resources the user owns or is a
 --     member of; superuser ('*','*') bypasses everything.
 -- ============================================================================
 
@@ -22,8 +23,8 @@
 INSERT INTO roles (slug, name, description, is_system) VALUES
     ('superuser', 'Superuser', 'Full, unrestricted access to everything.',                     TRUE),
     ('admin',     'Admin',     'Manages assets, storage accounts, users and CLI sessions.',    TRUE),
-    ('member',    'Member',    'Owns galleries/albums and manages their own assets.',          TRUE),
-    ('viewer',    'Viewer',    'Read-only access to galleries/albums they belong to.',         TRUE)
+    ('member',    'Member',    'Owns spaces/folders and manages their own assets.',            TRUE),
+    ('viewer',    'Viewer',    'Read-only access to spaces they belong to.',                   TRUE)
 ON CONFLICT (slug) DO UPDATE
     SET name = EXCLUDED.name,
         description = EXCLUDED.description,
@@ -41,17 +42,16 @@ INSERT INTO permissions (resource, action, description) VALUES
     ('asset',    'delete',   'Delete assets'),
     ('asset',    'download', 'Download asset files'),
 
-    ('gallery',  'read',     'View galleries'),
-    ('gallery',  'create',   'Create galleries'),
-    ('gallery',  'update',   'Rename / edit galleries'),
-    ('gallery',  'delete',   'Delete galleries'),
-    ('gallery',  'invite',   'Invite / manage gallery members'),
+    ('space',    'read',     'View spaces'),
+    ('space',    'create',   'Create spaces'),
+    ('space',    'update',   'Rename / edit spaces'),
+    ('space',    'delete',   'Delete spaces'),
+    ('space',    'invite',   'Invite / manage space members'),
 
-    ('album',    'read',     'View albums'),
-    ('album',    'create',   'Create albums'),
-    ('album',    'update',   'Edit albums / manage album assets'),
-    ('album',    'delete',   'Delete albums'),
-    ('album',    'invite',   'Invite / manage album members'),
+    ('folder',   'read',     'View folders'),
+    ('folder',   'create',   'Create folders'),
+    ('folder',   'update',   'Rename / move folders'),
+    ('folder',   'delete',   'Delete folders'),
 
     ('tag',      'read',     'View tags'),
     ('tag',      'create',   'Create tags / tag assets'),
@@ -97,8 +97,8 @@ SELECT r.id, p.id, 'all'::permission_scope
 FROM roles r
 JOIN permissions p ON (p.resource, p.action) IN (
     ('asset','read'), ('asset','create'), ('asset','update'), ('asset','delete'), ('asset','download'),
-    ('gallery','read'), ('gallery','create'), ('gallery','update'), ('gallery','delete'), ('gallery','invite'),
-    ('album','read'), ('album','create'), ('album','update'), ('album','delete'), ('album','invite'),
+    ('space','read'), ('space','create'), ('space','update'), ('space','delete'), ('space','invite'),
+    ('folder','read'), ('folder','create'), ('folder','update'), ('folder','delete'),
     ('tag','read'), ('tag','create'), ('tag','update'), ('tag','delete'),
     ('storage','read'), ('storage','create'), ('storage','update'), ('storage','delete'),
     ('user','read'), ('user','update'),
@@ -109,15 +109,15 @@ JOIN permissions p ON (p.resource, p.action) IN (
 WHERE r.slug = 'admin'
 ON CONFLICT (role_id, permission_id) DO UPDATE SET scope = EXCLUDED.scope;
 
--- member: owns galleries/albums/tags and manages their OWN assets. Access to a
--- specific gallery/album is further governed by membership role.
+-- member: owns spaces/folders/tags and manages their OWN assets. Access to a
+-- specific space is further governed by membership role.
 INSERT INTO role_permissions (role_id, permission_id, scope)
 SELECT r.id, p.id, 'own'::permission_scope
 FROM roles r
 JOIN permissions p ON (p.resource, p.action) IN (
     ('asset','read'), ('asset','create'), ('asset','update'), ('asset','delete'), ('asset','download'),
-    ('gallery','read'), ('gallery','create'), ('gallery','update'), ('gallery','delete'), ('gallery','invite'),
-    ('album','read'), ('album','create'), ('album','update'), ('album','delete'), ('album','invite'),
+    ('space','read'), ('space','create'), ('space','update'), ('space','delete'), ('space','invite'),
+    ('folder','read'), ('folder','create'), ('folder','update'), ('folder','delete'),
     ('tag','read'), ('tag','create'), ('tag','update'), ('tag','delete'),
     ('storage','read'),
     ('dashboard','read')
@@ -125,14 +125,14 @@ JOIN permissions p ON (p.resource, p.action) IN (
 WHERE r.slug = 'member'
 ON CONFLICT (role_id, permission_id) DO UPDATE SET scope = EXCLUDED.scope;
 
--- viewer: read-only over galleries/albums/assets they belong to.
+-- viewer: read-only over spaces/assets they belong to.
 INSERT INTO role_permissions (role_id, permission_id, scope)
 SELECT r.id, p.id, 'own'::permission_scope
 FROM roles r
 JOIN permissions p ON (p.resource, p.action) IN (
     ('asset','read'), ('asset','download'),
-    ('gallery','read'),
-    ('album','read'),
+    ('space','read'),
+    ('folder','read'),
     ('tag','read'),
     ('dashboard','read')
 )
