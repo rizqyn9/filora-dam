@@ -71,4 +71,4 @@ To act on a gallery/album/asset, a user is allowed if **either**:
 
 Because identities come from Clerk, the owner's account only exists after their
 first sign-in. After that, grant the superuser role once (SQL in
-[`seed.sql`](../../apps/api/internal/database/seed.sql) / [rbac.md](../database/rbac.md#5-superuser-bootstrap)).
+[`seed.sql`](../../api/internal/database/seed.sql) / [rbac.md](../database/rbac.md#5-superuser-bootstrap)).

@@ -50,7 +50,7 @@ Rules for writing and maintaining documentation in the Filora project.
 | Product docs (domain, features, roles, roadmap) | `docs/product/` |
 | Architecture (apps, layers, flows, storage, auth) | `docs/architecture/` |
 | Database (schema reference, ERD, design rules, RBAC) | `docs/database/` |
-| Per-app docs (setup, internal architecture, API spec) | `apps/<name>/README.md`, `apps/<name>/API.md` |
+| Per-app docs (setup, internal architecture, API spec) | `<name>/README.md`, `<name>/API.md` |
 | Agent instructions (coding rules, conventions) | `.kiro/steering/` |
 
 ## Documentation Lookup Strategy
@@ -69,10 +69,10 @@ Use this table to resolve a knowledge need to the correct index file:
 |---|----|
 | What Filora is, domain terms, features, user roles | `docs/product/README.md` |
 | Database design, schema, tables, columns, ERD, naming conventions | `docs/database/README.md` |
-| Architecture, system design, request flows, storage layers, auth design | `docs/architecture/README.md` (if exists) or `apps/api/README.md` |
-| API endpoints, HTTP contracts, route structure | `apps/api/API.md` |
-| How to build, run, test, deploy the API | `apps/api/README.md` |
-| How to build, run the web app | `apps/web/README.md` |
+| Architecture, system design, request flows, storage layers, auth design | `docs/architecture/README.md` (if exists) or `api/README.md` |
+| API endpoints, HTTP contracts, route structure | `api/API.md` |
+| How to build, run, test, deploy the API | `api/README.md` |
+| How to build, run the web app | `web/README.md` |
 | Coding rules, commit conventions, agent behavior | `AGENTS.md` |
 | All documentation entry point | `docs/README.md` |
 
@@ -96,22 +96,22 @@ Use this table to resolve a knowledge need to the correct index file:
 | `docs/database/design-standards.md` | Naming, types, ID strategy, indexing, enum, migration conventions |
 | `docs/database/schema-reference.md` | Per-table column details, constraints, indexes, domain notes |
 
-**Canonical schema source:** `apps/api/internal/database/schema.sql`
-**sqlc queries:** `apps/api/internal/database/queries/*.sql`
+**Canonical schema source:** `api/internal/database/schema.sql`
+**sqlc queries:** `api/internal/database/queries/*.sql`
 
 ### Code Location Quick Reference
 
 | Area | Path |
 |------|------|
-| API modules (vertical slices) | `apps/api/internal/modules/{account,asset,dashboard,folder,rbac,session,space,storage,tag}/` |
-| Auth & middleware | `apps/api/internal/auth/`, `apps/api/internal/server/middleware/` |
-| Clerk integration | `apps/api/internal/clerk/` |
-| Config & env | `apps/api/internal/config/` |
-| Database layer (pgx pool) | `apps/api/internal/database/` |
-| sqlc generated code | `apps/api/internal/database/db/` |
-| Shared utilities | `apps/api/internal/lib/` |
-| Server setup & compose root | `apps/api/cmd/server/main.go` |
-| Worker (archive replication) | `apps/api/cmd/worker/main.go` |
+| API modules (vertical slices) | `api/internal/modules/{account,asset,dashboard,folder,rbac,session,space,storage,tag}/` |
+| Auth & middleware | `api/internal/auth/`, `api/internal/server/middleware/` |
+| Clerk integration | `api/internal/clerk/` |
+| Config & env | `api/internal/config/` |
+| Database layer (pgx pool) | `api/internal/database/` |
+| sqlc generated code | `api/internal/database/db/` |
+| Shared utilities | `api/internal/lib/` |
+| Server setup & compose root | `api/cmd/server/main.go` |
+| Worker (archive replication) | `api/cmd/worker/main.go` |
 
 ## Template for New Docs
 

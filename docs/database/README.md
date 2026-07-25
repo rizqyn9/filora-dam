@@ -6,7 +6,7 @@ Complete reference for Filora's PostgreSQL data model, design decisions, and con
 
 ## Source of Truth
 
-The canonical schema lives at `apps/api/internal/database/schema.sql`. If these docs and the SQL disagree, the SQL wins and these docs must be updated.
+The canonical schema lives at `api/internal/database/schema.sql`. If these docs and the SQL disagree, the SQL wins and these docs must be updated.
 
 ## Documents
 

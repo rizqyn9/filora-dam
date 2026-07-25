@@ -36,9 +36,9 @@ Scope reflects the area of code changed. Use the most specific applicable scope.
 
 | Scope | Applies to |
 |-------|-----------|
-| `api` | `apps/api` — handlers, services, middleware, server config |
-| `cli` | `apps/cli` — CLI client code |
-| `web` | `apps/web` — React frontend |
+| `api` | `api/` — handlers, services, middleware, server config |
+| `cli` | `cli/` — CLI client code |
+| `web` | `web/` — React frontend |
 | `db` | Database migrations, sqlc queries, schema changes |
 | `auth` | Authentication/authorization (Clerk integration, RBAC) |
 | `storage` | Storage adapters (Cloudinary, ImageKit, R2) |

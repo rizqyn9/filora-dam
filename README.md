@@ -13,10 +13,9 @@ Filora spreads files across multiple free-tier cloud accounts and keeps a cheap
 
 ```
 filora-dam/
-├── apps/
-│   ├── api/          # Go REST API server (all business logic)
-│   ├── cli/          # Go CLI client (planned)
-│   └── web/          # React 19 frontend
+├── api/              # Go REST API server (all business logic)
+├── cli/              # Go CLI client
+├── web/              # React 19 frontend
 ├── docs/             # Documentation (product, architecture, database)
 ├── AGENTS.md         # Engineering rules for all contributors/agents
 └── CLAUDE.md         # Points AI agents at AGENTS.md
@@ -26,9 +25,9 @@ filora-dam/
 
 | App | Stack | Status |
 |-----|-------|--------|
-| **API** ([README](apps/api/README.md)) | Go, Fiber v3, sqlc, PostgreSQL (Neon) | Phases 0–10 implemented; R2 adapter live |
-| **Web** ([README](apps/web/README.md)) | React 19, TypeScript, TanStack Query/Router, Tailwind v4, shadcn/ui, Zod | Scaffolded |
-| **CLI** ([README](apps/cli/README.md)) | Go, Cobra | Basic client (login, sessions, galleries, upload/list/download) |
+| **API** ([README](api/README.md)) | Go, Fiber v3, sqlc, PostgreSQL (Neon) | Phases 0–10 implemented; R2 adapter live |
+| **Web** ([README](web/README.md)) | React 19, TypeScript, TanStack Query/Router, Tailwind v4, shadcn/ui, Zod | Scaffolded |
+| **CLI** ([README](cli/README.md)) | Go, Cobra | Basic client (login, sessions, galleries, upload/list/download) |
 
 ## Features (target design)
 
@@ -63,7 +62,7 @@ See the [feature catalog](docs/product/features.md) for status of each item.
 
 ```bash
 git clone https://github.com/rizqyn9/filora-dam.git
-cd filora-dam/apps/api
+cd filora-dam/api
 
 cp .env.example .env          # set DATABASE_URL + Clerk keys
 make db-apply                 # apply schema.sql to your database (no migrations)

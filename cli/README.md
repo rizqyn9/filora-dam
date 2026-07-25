@@ -7,7 +7,7 @@ sessions.
 ## Install / run
 
 ```bash
-cd apps/cli
+cd cli
 go build -o bin/filora ./cmd/filora
 ./bin/filora --help
 # or: go run ./cmd/filora --help

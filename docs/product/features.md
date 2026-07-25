@@ -8,7 +8,7 @@ What Filora does, grouped by area. Each feature notes its **status**:
 - 🔭 **backlog** — planned, intentionally deferred
 
 See [roadmap.md](./roadmap.md) for the current status and remaining work, and
-[apps/api/API.md](../../apps/api/API.md) for the endpoint reference.
+[api/API.md](../../api/API.md) for the endpoint reference.
 
 > The tables below were authored during design; treat the legend above as the
 > current source of truth. Auth, RBAC, CLI sessions, galleries, albums, tags,

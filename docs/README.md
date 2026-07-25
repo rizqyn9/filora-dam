@@ -36,9 +36,9 @@ If docs and code/SQL disagree, the **code/SQL wins** and the docs must be fixed.
 
 | App | Docs |
 |-----|------|
-| API (Go) | [`apps/api/README.md`](../apps/api/README.md), [`apps/api/API.md`](../apps/api/API.md) |
-| Web (React) | [`apps/web/README.md`](../apps/web/README.md) |
-| CLI (Go) | _planned_ |
+| API (Go) | [`api/README.md`](../api/README.md), [`api/API.md`](../api/API.md) |
+| Web (React) | [`web/README.md`](../web/README.md) |
+| CLI (Go) | [`cli/README.md`](../cli/README.md) |
 
 ---
 

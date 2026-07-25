@@ -8,12 +8,12 @@ working family DAM quickly, validate it, and keep the code maintainable.
 ## Where we are
 
 - ✅ **Database design** is complete and is the source of truth
-  ([schema.sql](../../apps/api/internal/database/schema.sql), [docs](../database/README.md)).
+  ([schema.sql](../../api/internal/database/schema.sql), [docs](../database/README.md)).
 - ✅ **API rebuild (phases 0–9)** implemented on the target design: Clerk auth,
   RBAC, CLI sessions, galleries, albums, tags, storage accounts, assets, the
   archive worker, and the dashboard. See
   [implementation-plan.md](../architecture/implementation-plan.md) and
-  [apps/api/API.md](../../apps/api/API.md).
+  [api/API.md](../../api/API.md).
 - 🟡 **Storage adapters** — the **R2 (S3-compatible) adapter is implemented** and
   works for both layers; `cloudinary`/`imagekit`/`gcs` remain stubbed. With an
   active `r2` storage account configured, uploads and archive replication work

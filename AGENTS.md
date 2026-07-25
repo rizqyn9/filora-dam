@@ -18,12 +18,12 @@ organize, sync, and manage digital assets. Storage complexity is fully abstracte
 stay maintainable, minimize ops. Do NOT optimize for hypothetical future needs.
 
 ## Tech stack
-- **API** (`apps/api`): Go 1.23+, Fiber v3, sqlc, PostgreSQL (Neon), validator v10, golang-migrate
-- **CLI** (`apps/cli`): Go — thin HTTP client, no business logic
-- **Web** (`apps/web`): React 19, TypeScript, TanStack Query + Router, Tailwind v4, Shadcn UI, Zod v4, bun
+- **API** (`api/`): Go 1.23+, Fiber v3, sqlc, PostgreSQL (Neon), validator v10, golang-migrate
+- **CLI** (`cli/`): Go — thin HTTP client, no business logic
+- **Web** (`web/`): React 19, TypeScript, TanStack Query + Router, Tailwind v4, Shadcn UI, Zod v4, bun
 - **Storage providers**: Cloudinary, ImageKit, Cloudflare R2. **Backup (planned)**: Alibaba OSS / GCS Archive
 
-Three independent apps under `apps/`. No shared packages — each app is independent.
+Three independent apps at the workspace root (`api/`, `cli/`, `web/`). No shared packages — each app is independent.
 
 ## Architecture (see docs/architecture/project-structure.md for the full blueprint)
 - API uses **modular vertical-slice** architecture. Each module owns its full stack: `handler.go` (HTTP), `service.go` (business logic), `repository.go` (DB via sqlc), `models.go` (DTOs/structs), optional `routes.go`. Modules live in `internal/modules/<name>/`. Avoid layer-first layout.

@@ -31,7 +31,7 @@ and CLI clients are thin layers over this API.
 ## Quick Start
 
 ```bash
-cd apps/api
+cd api
 cp .env.example .env         # set DATABASE_URL (+ Clerk keys for target)
 go mod download
 
@@ -65,7 +65,7 @@ make clean           # Remove build artifacts
 ## Project Structure
 
 ```
-apps/api/
+api/
 ├── cmd/
 │   ├── server/main.go           # HTTP API (compose root)
 │   └── worker/main.go           # archive replication worker
