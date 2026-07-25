@@ -12,9 +12,10 @@ run: ## Run the server
 run-worker: ## Run the archive worker
 	@go run cmd/worker/main.go
 
-build: ## Build the binaries (server + worker)
+build: ## Build the binaries (server, worker, migrate)
 	@go build -o bin/server cmd/server/main.go
 	@go build -o bin/worker cmd/worker/main.go
+	@go build -o bin/migrate cmd/migrate/main.go
 
 test: ## Run tests
 	@go test -v ./...
