@@ -11,44 +11,41 @@ import (
 	"github.com/google/uuid"
 )
 
-const attachTag = `-- name: AttachTag :exec
+const addAssetTag = `-- name: AddAssetTag :exec
 INSERT INTO asset_tags (asset_id, tag_id)
 VALUES ($1, $2)
-ON CONFLICT (asset_id, tag_id) DO NOTHING
+ON CONFLICT DO NOTHING
 `
 
-type AttachTagParams struct {
+type AddAssetTagParams struct {
 	AssetID uuid.UUID `json:"asset_id"`
 	TagID   int64     `json:"tag_id"`
 }
 
-func (q *Queries) AttachTag(ctx context.Context, arg AttachTagParams) error {
-	_, err := q.db.Exec(ctx, attachTag, arg.AssetID, arg.TagID)
+func (q *Queries) AddAssetTag(ctx context.Context, arg AddAssetTagParams) error {
+	_, err := q.db.Exec(ctx, addAssetTag, arg.AssetID, arg.TagID)
 	return err
 }
 
 const createTag = `-- name: CreateTag :one
-INSERT INTO tags (space_id, name, created_by)
-VALUES ($1, $2, $3)
-RETURNING id, space_id, name, created_by, created_at, updated_at
+INSERT INTO tags (space_id, name)
+VALUES ($1, $2)
+RETURNING id, space_id, name, created_at
 `
 
 type CreateTagParams struct {
-	SpaceID   int64  `json:"space_id"`
-	Name      string `json:"name"`
-	CreatedBy *int64 `json:"created_by"`
+	SpaceID uuid.UUID `json:"space_id"`
+	Name    string    `json:"name"`
 }
 
 func (q *Queries) CreateTag(ctx context.Context, arg CreateTagParams) (Tag, error) {
-	row := q.db.QueryRow(ctx, createTag, arg.SpaceID, arg.Name, arg.CreatedBy)
+	row := q.db.QueryRow(ctx, createTag, arg.SpaceID, arg.Name)
 	var i Tag
 	err := row.Scan(
 		&i.ID,
 		&i.SpaceID,
 		&i.Name,
-		&i.CreatedBy,
 		&i.CreatedAt,
-		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -62,25 +59,8 @@ func (q *Queries) DeleteTag(ctx context.Context, id int64) error {
 	return err
 }
 
-const detachTag = `-- name: DetachTag :execrows
-DELETE FROM asset_tags WHERE asset_id = $1 AND tag_id = $2
-`
-
-type DetachTagParams struct {
-	AssetID uuid.UUID `json:"asset_id"`
-	TagID   int64     `json:"tag_id"`
-}
-
-func (q *Queries) DetachTag(ctx context.Context, arg DetachTagParams) (int64, error) {
-	result, err := q.db.Exec(ctx, detachTag, arg.AssetID, arg.TagID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const getTagByID = `-- name: GetTagByID :one
-SELECT id, space_id, name, created_by, created_at, updated_at FROM tags WHERE id = $1
+SELECT id, space_id, name, created_at FROM tags WHERE id = $1
 `
 
 func (q *Queries) GetTagByID(ctx context.Context, id int64) (Tag, error) {
@@ -90,23 +70,87 @@ func (q *Queries) GetTagByID(ctx context.Context, id int64) (Tag, error) {
 		&i.ID,
 		&i.SpaceID,
 		&i.Name,
-		&i.CreatedBy,
 		&i.CreatedAt,
-		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const listAssetTags = `-- name: ListAssetTags :many
-SELECT t.id, t.space_id, t.name, t.created_by, t.created_at, t.updated_at
-FROM asset_tags at
-JOIN tags t ON t.id = at.tag_id
+const getTagByName = `-- name: GetTagByName :one
+SELECT id, space_id, name, created_at FROM tags WHERE space_id = $1 AND name = $2
+`
+
+type GetTagByNameParams struct {
+	SpaceID uuid.UUID `json:"space_id"`
+	Name    string    `json:"name"`
+}
+
+func (q *Queries) GetTagByName(ctx context.Context, arg GetTagByNameParams) (Tag, error) {
+	row := q.db.QueryRow(ctx, getTagByName, arg.SpaceID, arg.Name)
+	var i Tag
+	err := row.Scan(
+		&i.ID,
+		&i.SpaceID,
+		&i.Name,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const listAssetsByTag = `-- name: ListAssetsByTag :many
+SELECT a.id, a.original_filename, a.name, a.mime_type, a.size_bytes, a.checksum_sha256, a.width, a.height, a.uploaded_by, a.created_at, a.updated_at FROM assets a
+JOIN asset_tags at ON at.asset_id = a.id
+WHERE at.tag_id = $1
+ORDER BY a.created_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListAssetsByTagParams struct {
+	TagID  int64 `json:"tag_id"`
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+func (q *Queries) ListAssetsByTag(ctx context.Context, arg ListAssetsByTagParams) ([]Asset, error) {
+	rows, err := q.db.Query(ctx, listAssetsByTag, arg.TagID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Asset{}
+	for rows.Next() {
+		var i Asset
+		if err := rows.Scan(
+			&i.ID,
+			&i.OriginalFilename,
+			&i.Name,
+			&i.MimeType,
+			&i.SizeBytes,
+			&i.ChecksumSha256,
+			&i.Width,
+			&i.Height,
+			&i.UploadedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTagsByAsset = `-- name: ListTagsByAsset :many
+SELECT t.id, t.space_id, t.name, t.created_at FROM tags t
+JOIN asset_tags at ON at.tag_id = t.id
 WHERE at.asset_id = $1
 ORDER BY t.name
 `
 
-func (q *Queries) ListAssetTags(ctx context.Context, assetID uuid.UUID) ([]Tag, error) {
-	rows, err := q.db.Query(ctx, listAssetTags, assetID)
+func (q *Queries) ListTagsByAsset(ctx context.Context, assetID uuid.UUID) ([]Tag, error) {
+	rows, err := q.db.Query(ctx, listTagsByAsset, assetID)
 	if err != nil {
 		return nil, err
 	}
@@ -118,9 +162,7 @@ func (q *Queries) ListAssetTags(ctx context.Context, assetID uuid.UUID) ([]Tag, 
 			&i.ID,
 			&i.SpaceID,
 			&i.Name,
-			&i.CreatedBy,
 			&i.CreatedAt,
-			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -133,10 +175,10 @@ func (q *Queries) ListAssetTags(ctx context.Context, assetID uuid.UUID) ([]Tag, 
 }
 
 const listTagsBySpace = `-- name: ListTagsBySpace :many
-SELECT id, space_id, name, created_by, created_at, updated_at FROM tags WHERE space_id = $1 ORDER BY name
+SELECT id, space_id, name, created_at FROM tags WHERE space_id = $1 ORDER BY name
 `
 
-func (q *Queries) ListTagsBySpace(ctx context.Context, spaceID int64) ([]Tag, error) {
+func (q *Queries) ListTagsBySpace(ctx context.Context, spaceID uuid.UUID) ([]Tag, error) {
 	rows, err := q.db.Query(ctx, listTagsBySpace, spaceID)
 	if err != nil {
 		return nil, err
@@ -149,9 +191,7 @@ func (q *Queries) ListTagsBySpace(ctx context.Context, spaceID int64) ([]Tag, er
 			&i.ID,
 			&i.SpaceID,
 			&i.Name,
-			&i.CreatedBy,
 			&i.CreatedAt,
-			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -163,25 +203,16 @@ func (q *Queries) ListTagsBySpace(ctx context.Context, spaceID int64) ([]Tag, er
 	return items, nil
 }
 
-const updateTag = `-- name: UpdateTag :one
-UPDATE tags SET name = $2 WHERE id = $1 RETURNING id, space_id, name, created_by, created_at, updated_at
+const removeAssetTag = `-- name: RemoveAssetTag :exec
+DELETE FROM asset_tags WHERE asset_id = $1 AND tag_id = $2
 `
 
-type UpdateTagParams struct {
-	ID   int64  `json:"id"`
-	Name string `json:"name"`
+type RemoveAssetTagParams struct {
+	AssetID uuid.UUID `json:"asset_id"`
+	TagID   int64     `json:"tag_id"`
 }
 
-func (q *Queries) UpdateTag(ctx context.Context, arg UpdateTagParams) (Tag, error) {
-	row := q.db.QueryRow(ctx, updateTag, arg.ID, arg.Name)
-	var i Tag
-	err := row.Scan(
-		&i.ID,
-		&i.SpaceID,
-		&i.Name,
-		&i.CreatedBy,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+func (q *Queries) RemoveAssetTag(ctx context.Context, arg RemoveAssetTagParams) error {
+	_, err := q.db.Exec(ctx, removeAssetTag, arg.AssetID, arg.TagID)
+	return err
 }

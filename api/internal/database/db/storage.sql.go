@@ -11,323 +11,346 @@ import (
 	"github.com/google/uuid"
 )
 
-const addStorageProviderUsed = `-- name: AddStorageProviderUsed :exec
-UPDATE storage_providers SET used = used + $2 WHERE id = $1
+const createStorageAccount = `-- name: CreateStorageAccount :one
+INSERT INTO storage_accounts (provider, label, layer, credentials_encrypted, quota_bytes)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, provider, label, layer, credentials_encrypted, is_active, quota_bytes, used_bytes, created_at, updated_at
 `
 
-type AddStorageProviderUsedParams struct {
-	ID   int64 `json:"id"`
-	Used int64 `json:"used"`
+type CreateStorageAccountParams struct {
+	Provider             StorageProvider `json:"provider"`
+	Label                string          `json:"label"`
+	Layer                StorageLayer    `json:"layer"`
+	CredentialsEncrypted []byte          `json:"credentials_encrypted"`
+	QuotaBytes           int64           `json:"quota_bytes"`
 }
 
-func (q *Queries) AddStorageProviderUsed(ctx context.Context, arg AddStorageProviderUsedParams) error {
-	_, err := q.db.Exec(ctx, addStorageProviderUsed, arg.ID, arg.Used)
-	return err
+func (q *Queries) CreateStorageAccount(ctx context.Context, arg CreateStorageAccountParams) (StorageAccount, error) {
+	row := q.db.QueryRow(ctx, createStorageAccount,
+		arg.Provider,
+		arg.Label,
+		arg.Layer,
+		arg.CredentialsEncrypted,
+		arg.QuotaBytes,
+	)
+	var i StorageAccount
+	err := row.Scan(
+		&i.ID,
+		&i.Provider,
+		&i.Label,
+		&i.Layer,
+		&i.CredentialsEncrypted,
+		&i.IsActive,
+		&i.QuotaBytes,
+		&i.UsedBytes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const createStorageLocation = `-- name: CreateStorageLocation :one
-INSERT INTO storage_locations (asset_id, provider_id, layer, provider_key, url, status)
+INSERT INTO storage_locations (asset_id, account_id, layer, status, remote_path, remote_url)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, asset_id, provider_id, layer, provider_key, url, status, metadata, created_at, updated_at
+RETURNING id, asset_id, account_id, layer, status, remote_path, remote_url, error, created_at, updated_at
 `
 
 type CreateStorageLocationParams struct {
-	AssetID     uuid.UUID      `json:"asset_id"`
-	ProviderID  int64          `json:"provider_id"`
-	Layer       StorageLayer   `json:"layer"`
-	ProviderKey string         `json:"provider_key"`
-	Url         *string        `json:"url"`
-	Status      LocationStatus `json:"status"`
+	AssetID    uuid.UUID      `json:"asset_id"`
+	AccountID  int64          `json:"account_id"`
+	Layer      StorageLayer   `json:"layer"`
+	Status     LocationStatus `json:"status"`
+	RemotePath *string        `json:"remote_path"`
+	RemoteUrl  *string        `json:"remote_url"`
 }
 
 func (q *Queries) CreateStorageLocation(ctx context.Context, arg CreateStorageLocationParams) (StorageLocation, error) {
 	row := q.db.QueryRow(ctx, createStorageLocation,
 		arg.AssetID,
-		arg.ProviderID,
+		arg.AccountID,
 		arg.Layer,
-		arg.ProviderKey,
-		arg.Url,
 		arg.Status,
+		arg.RemotePath,
+		arg.RemoteUrl,
 	)
 	var i StorageLocation
 	err := row.Scan(
 		&i.ID,
 		&i.AssetID,
-		&i.ProviderID,
+		&i.AccountID,
 		&i.Layer,
-		&i.ProviderKey,
-		&i.Url,
 		&i.Status,
-		&i.Metadata,
+		&i.RemotePath,
+		&i.RemoteUrl,
+		&i.Error,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const createStorageProvider = `-- name: CreateStorageProvider :one
-INSERT INTO storage_providers (layer, name, type, credentials, quota, created_by)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, layer, name, type, credentials, quota, used, is_active, created_by, created_at, updated_at
+const deactivateAccount = `-- name: DeactivateAccount :exec
+UPDATE storage_accounts SET is_active = false, updated_at = now() WHERE id = $1
 `
 
-type CreateStorageProviderParams struct {
-	Layer       StorageLayer `json:"layer"`
-	Name        string       `json:"name"`
-	Type        string       `json:"type"`
-	Credentials []byte       `json:"credentials"`
-	Quota       *int64       `json:"quota"`
-	CreatedBy   *int64       `json:"created_by"`
-}
-
-func (q *Queries) CreateStorageProvider(ctx context.Context, arg CreateStorageProviderParams) (StorageProvider, error) {
-	row := q.db.QueryRow(ctx, createStorageProvider,
-		arg.Layer,
-		arg.Name,
-		arg.Type,
-		arg.Credentials,
-		arg.Quota,
-		arg.CreatedBy,
-	)
-	var i StorageProvider
-	err := row.Scan(
-		&i.ID,
-		&i.Layer,
-		&i.Name,
-		&i.Type,
-		&i.Credentials,
-		&i.Quota,
-		&i.Used,
-		&i.IsActive,
-		&i.CreatedBy,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const deactivateStorageProvider = `-- name: DeactivateStorageProvider :exec
-UPDATE storage_providers SET is_active = FALSE WHERE id = $1
-`
-
-func (q *Queries) DeactivateStorageProvider(ctx context.Context, id int64) error {
-	_, err := q.db.Exec(ctx, deactivateStorageProvider, id)
+func (q *Queries) DeactivateAccount(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, deactivateAccount, id)
 	return err
 }
 
-const enqueueArchiveJob = `-- name: EnqueueArchiveJob :exec
-INSERT INTO archive_sync_jobs (asset_id, target_layer)
-VALUES ($1, 'archive')
-ON CONFLICT (asset_id, target_layer) WHERE status IN ('pending', 'running') DO NOTHING
+const decrementAccountUsage = `-- name: DecrementAccountUsage :exec
+UPDATE storage_accounts
+SET used_bytes = GREATEST(used_bytes - $2, 0), updated_at = now()
+WHERE id = $1
 `
 
-func (q *Queries) EnqueueArchiveJob(ctx context.Context, assetID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, enqueueArchiveJob, assetID)
+type DecrementAccountUsageParams struct {
+	ID        int64 `json:"id"`
+	UsedBytes int64 `json:"used_bytes"`
+}
+
+func (q *Queries) DecrementAccountUsage(ctx context.Context, arg DecrementAccountUsageParams) error {
+	_, err := q.db.Exec(ctx, decrementAccountUsage, arg.ID, arg.UsedBytes)
 	return err
 }
 
-const getServingLocationURL = `-- name: GetServingLocationURL :one
-SELECT url FROM storage_locations
-WHERE asset_id = $1 AND layer = 'serving' AND status = 'stored' AND url IS NOT NULL
+const getArchiveLocation = `-- name: GetArchiveLocation :one
+SELECT id, asset_id, account_id, layer, status, remote_path, remote_url, error, created_at, updated_at FROM storage_locations
+WHERE asset_id = $1 AND layer = 'archive' AND status = 'stored'
 LIMIT 1
 `
 
-func (q *Queries) GetServingLocationURL(ctx context.Context, assetID uuid.UUID) (*string, error) {
-	row := q.db.QueryRow(ctx, getServingLocationURL, assetID)
-	var url *string
-	err := row.Scan(&url)
-	return url, err
-}
-
-const getStorageProvider = `-- name: GetStorageProvider :one
-SELECT id, layer, name, type, credentials, quota, used, is_active, created_by, created_at, updated_at FROM storage_providers WHERE id = $1
-`
-
-func (q *Queries) GetStorageProvider(ctx context.Context, id int64) (StorageProvider, error) {
-	row := q.db.QueryRow(ctx, getStorageProvider, id)
-	var i StorageProvider
+func (q *Queries) GetArchiveLocation(ctx context.Context, assetID uuid.UUID) (StorageLocation, error) {
+	row := q.db.QueryRow(ctx, getArchiveLocation, assetID)
+	var i StorageLocation
 	err := row.Scan(
 		&i.ID,
+		&i.AssetID,
+		&i.AccountID,
 		&i.Layer,
-		&i.Name,
-		&i.Type,
-		&i.Credentials,
-		&i.Quota,
-		&i.Used,
-		&i.IsActive,
-		&i.CreatedBy,
+		&i.Status,
+		&i.RemotePath,
+		&i.RemoteUrl,
+		&i.Error,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const listActiveProvidersByLayer = `-- name: ListActiveProvidersByLayer :many
-SELECT id, layer, name, type, credentials, quota, used, is_active, created_by, created_at, updated_at FROM storage_providers
-WHERE layer = $1 AND is_active = TRUE
-ORDER BY id
+const getServingLocation = `-- name: GetServingLocation :one
+SELECT id, asset_id, account_id, layer, status, remote_path, remote_url, error, created_at, updated_at FROM storage_locations
+WHERE asset_id = $1 AND layer = 'serving' AND status = 'stored'
+LIMIT 1
 `
 
-func (q *Queries) ListActiveProvidersByLayer(ctx context.Context, layer StorageLayer) ([]StorageProvider, error) {
-	rows, err := q.db.Query(ctx, listActiveProvidersByLayer, layer)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []StorageProvider{}
-	for rows.Next() {
-		var i StorageProvider
-		if err := rows.Scan(
-			&i.ID,
-			&i.Layer,
-			&i.Name,
-			&i.Type,
-			&i.Credentials,
-			&i.Quota,
-			&i.Used,
-			&i.IsActive,
-			&i.CreatedBy,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) GetServingLocation(ctx context.Context, assetID uuid.UUID) (StorageLocation, error) {
+	row := q.db.QueryRow(ctx, getServingLocation, assetID)
+	var i StorageLocation
+	err := row.Scan(
+		&i.ID,
+		&i.AssetID,
+		&i.AccountID,
+		&i.Layer,
+		&i.Status,
+		&i.RemotePath,
+		&i.RemoteUrl,
+		&i.Error,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
-const listStorageAccountUsage = `-- name: ListStorageAccountUsage :many
-SELECT id, name, layer, type, is_active, quota, used,
-       COALESCE(used_percent, 0)::float8 AS used_percent,
-       location_count, stored_count, pending_count, failed_count
-FROM storage_account_usage
-ORDER BY layer, name
+const getStorageAccountByID = `-- name: GetStorageAccountByID :one
+SELECT id, provider, label, layer, credentials_encrypted, is_active, quota_bytes, used_bytes, created_at, updated_at FROM storage_accounts WHERE id = $1
 `
 
-type ListStorageAccountUsageRow struct {
-	ID            int64        `json:"id"`
-	Name          string       `json:"name"`
-	Layer         StorageLayer `json:"layer"`
-	Type          string       `json:"type"`
-	IsActive      bool         `json:"is_active"`
-	Quota         *int64       `json:"quota"`
-	Used          int64        `json:"used"`
-	UsedPercent   float64      `json:"used_percent"`
-	LocationCount int64        `json:"location_count"`
-	StoredCount   int64        `json:"stored_count"`
-	PendingCount  int64        `json:"pending_count"`
-	FailedCount   int64        `json:"failed_count"`
+func (q *Queries) GetStorageAccountByID(ctx context.Context, id int64) (StorageAccount, error) {
+	row := q.db.QueryRow(ctx, getStorageAccountByID, id)
+	var i StorageAccount
+	err := row.Scan(
+		&i.ID,
+		&i.Provider,
+		&i.Label,
+		&i.Layer,
+		&i.CredentialsEncrypted,
+		&i.IsActive,
+		&i.QuotaBytes,
+		&i.UsedBytes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
-func (q *Queries) ListStorageAccountUsage(ctx context.Context) ([]ListStorageAccountUsageRow, error) {
-	rows, err := q.db.Query(ctx, listStorageAccountUsage)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListStorageAccountUsageRow{}
-	for rows.Next() {
-		var i ListStorageAccountUsageRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Layer,
-			&i.Type,
-			&i.IsActive,
-			&i.Quota,
-			&i.Used,
-			&i.UsedPercent,
-			&i.LocationCount,
-			&i.StoredCount,
-			&i.PendingCount,
-			&i.FailedCount,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listStorageProviders = `-- name: ListStorageProviders :many
-SELECT id, layer, name, type, credentials, quota, used, is_active, created_by, created_at, updated_at FROM storage_providers ORDER BY layer, name
-`
-
-func (q *Queries) ListStorageProviders(ctx context.Context) ([]StorageProvider, error) {
-	rows, err := q.db.Query(ctx, listStorageProviders)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []StorageProvider{}
-	for rows.Next() {
-		var i StorageProvider
-		if err := rows.Scan(
-			&i.ID,
-			&i.Layer,
-			&i.Name,
-			&i.Type,
-			&i.Credentials,
-			&i.Quota,
-			&i.Used,
-			&i.IsActive,
-			&i.CreatedBy,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const updateStorageProvider = `-- name: UpdateStorageProvider :one
-UPDATE storage_providers
-SET name = $2, credentials = $3, quota = $4, is_active = $5
+const incrementAccountUsage = `-- name: IncrementAccountUsage :exec
+UPDATE storage_accounts
+SET used_bytes = used_bytes + $2, updated_at = now()
 WHERE id = $1
-RETURNING id, layer, name, type, credentials, quota, used, is_active, created_by, created_at, updated_at
 `
 
-type UpdateStorageProviderParams struct {
-	ID          int64  `json:"id"`
-	Name        string `json:"name"`
-	Credentials []byte `json:"credentials"`
-	Quota       *int64 `json:"quota"`
-	IsActive    bool   `json:"is_active"`
+type IncrementAccountUsageParams struct {
+	ID        int64 `json:"id"`
+	UsedBytes int64 `json:"used_bytes"`
 }
 
-func (q *Queries) UpdateStorageProvider(ctx context.Context, arg UpdateStorageProviderParams) (StorageProvider, error) {
-	row := q.db.QueryRow(ctx, updateStorageProvider,
+func (q *Queries) IncrementAccountUsage(ctx context.Context, arg IncrementAccountUsageParams) error {
+	_, err := q.db.Exec(ctx, incrementAccountUsage, arg.ID, arg.UsedBytes)
+	return err
+}
+
+const listActiveAccountsByLayer = `-- name: ListActiveAccountsByLayer :many
+SELECT id, provider, label, layer, credentials_encrypted, is_active, quota_bytes, used_bytes, created_at, updated_at FROM storage_accounts
+WHERE layer = $1 AND is_active = true
+ORDER BY used_bytes ASC
+`
+
+func (q *Queries) ListActiveAccountsByLayer(ctx context.Context, layer StorageLayer) ([]StorageAccount, error) {
+	rows, err := q.db.Query(ctx, listActiveAccountsByLayer, layer)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []StorageAccount{}
+	for rows.Next() {
+		var i StorageAccount
+		if err := rows.Scan(
+			&i.ID,
+			&i.Provider,
+			&i.Label,
+			&i.Layer,
+			&i.CredentialsEncrypted,
+			&i.IsActive,
+			&i.QuotaBytes,
+			&i.UsedBytes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAllStorageAccounts = `-- name: ListAllStorageAccounts :many
+SELECT id, provider, label, layer, credentials_encrypted, is_active, quota_bytes, used_bytes, created_at, updated_at FROM storage_accounts ORDER BY created_at
+`
+
+func (q *Queries) ListAllStorageAccounts(ctx context.Context) ([]StorageAccount, error) {
+	rows, err := q.db.Query(ctx, listAllStorageAccounts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []StorageAccount{}
+	for rows.Next() {
+		var i StorageAccount
+		if err := rows.Scan(
+			&i.ID,
+			&i.Provider,
+			&i.Label,
+			&i.Layer,
+			&i.CredentialsEncrypted,
+			&i.IsActive,
+			&i.QuotaBytes,
+			&i.UsedBytes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLocationsByAsset = `-- name: ListLocationsByAsset :many
+SELECT id, asset_id, account_id, layer, status, remote_path, remote_url, error, created_at, updated_at FROM storage_locations WHERE asset_id = $1 ORDER BY created_at
+`
+
+func (q *Queries) ListLocationsByAsset(ctx context.Context, assetID uuid.UUID) ([]StorageLocation, error) {
+	rows, err := q.db.Query(ctx, listLocationsByAsset, assetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []StorageLocation{}
+	for rows.Next() {
+		var i StorageLocation
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssetID,
+			&i.AccountID,
+			&i.Layer,
+			&i.Status,
+			&i.RemotePath,
+			&i.RemoteUrl,
+			&i.Error,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateStorageAccount = `-- name: UpdateStorageAccount :exec
+UPDATE storage_accounts
+SET label = $2, is_active = $3, quota_bytes = $4, updated_at = now()
+WHERE id = $1
+`
+
+type UpdateStorageAccountParams struct {
+	ID         int64  `json:"id"`
+	Label      string `json:"label"`
+	IsActive   bool   `json:"is_active"`
+	QuotaBytes int64  `json:"quota_bytes"`
+}
+
+func (q *Queries) UpdateStorageAccount(ctx context.Context, arg UpdateStorageAccountParams) error {
+	_, err := q.db.Exec(ctx, updateStorageAccount,
 		arg.ID,
-		arg.Name,
-		arg.Credentials,
-		arg.Quota,
+		arg.Label,
 		arg.IsActive,
+		arg.QuotaBytes,
 	)
-	var i StorageProvider
-	err := row.Scan(
-		&i.ID,
-		&i.Layer,
-		&i.Name,
-		&i.Type,
-		&i.Credentials,
-		&i.Quota,
-		&i.Used,
-		&i.IsActive,
-		&i.CreatedBy,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+	return err
+}
+
+const updateStorageLocationStatus = `-- name: UpdateStorageLocationStatus :exec
+UPDATE storage_locations
+SET status = $2, remote_path = $3, remote_url = $4, error = $5, updated_at = now()
+WHERE id = $1
+`
+
+type UpdateStorageLocationStatusParams struct {
+	ID         int64          `json:"id"`
+	Status     LocationStatus `json:"status"`
+	RemotePath *string        `json:"remote_path"`
+	RemoteUrl  *string        `json:"remote_url"`
+	Error      *string        `json:"error"`
+}
+
+func (q *Queries) UpdateStorageLocationStatus(ctx context.Context, arg UpdateStorageLocationStatusParams) error {
+	_, err := q.db.Exec(ctx, updateStorageLocationStatus,
+		arg.ID,
+		arg.Status,
+		arg.RemotePath,
+		arg.RemoteUrl,
+		arg.Error,
 	)
-	return i, err
+	return err
 }

@@ -1,49 +1,56 @@
--- name: CreateStorageProvider :one
-INSERT INTO storage_providers (layer, name, type, credentials, quota, created_by)
-VALUES ($1, $2, $3, $4, $5, $6)
+-- name: GetStorageAccountByID :one
+SELECT * FROM storage_accounts WHERE id = $1;
+
+-- name: ListActiveAccountsByLayer :many
+SELECT * FROM storage_accounts
+WHERE layer = $1 AND is_active = true
+ORDER BY used_bytes ASC;
+
+-- name: ListAllStorageAccounts :many
+SELECT * FROM storage_accounts ORDER BY created_at;
+
+-- name: CreateStorageAccount :one
+INSERT INTO storage_accounts (provider, label, layer, credentials_encrypted, quota_bytes)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
 
--- name: GetStorageProvider :one
-SELECT * FROM storage_providers WHERE id = $1;
+-- name: UpdateStorageAccount :exec
+UPDATE storage_accounts
+SET label = $2, is_active = $3, quota_bytes = $4, updated_at = now()
+WHERE id = $1;
 
--- name: ListStorageProviders :many
-SELECT * FROM storage_providers ORDER BY layer, name;
+-- name: IncrementAccountUsage :exec
+UPDATE storage_accounts
+SET used_bytes = used_bytes + $2, updated_at = now()
+WHERE id = $1;
 
--- name: ListActiveProvidersByLayer :many
-SELECT * FROM storage_providers
-WHERE layer = $1 AND is_active = TRUE
-ORDER BY id;
+-- name: DecrementAccountUsage :exec
+UPDATE storage_accounts
+SET used_bytes = GREATEST(used_bytes - $2, 0), updated_at = now()
+WHERE id = $1;
 
--- name: UpdateStorageProvider :one
-UPDATE storage_providers
-SET name = $2, credentials = $3, quota = $4, is_active = $5
-WHERE id = $1
-RETURNING *;
-
--- name: DeactivateStorageProvider :exec
-UPDATE storage_providers SET is_active = FALSE WHERE id = $1;
-
--- name: AddStorageProviderUsed :exec
-UPDATE storage_providers SET used = used + $2 WHERE id = $1;
-
--- name: ListStorageAccountUsage :many
-SELECT id, name, layer, type, is_active, quota, used,
-       COALESCE(used_percent, 0)::float8 AS used_percent,
-       location_count, stored_count, pending_count, failed_count
-FROM storage_account_usage
-ORDER BY layer, name;
+-- name: DeactivateAccount :exec
+UPDATE storage_accounts SET is_active = false, updated_at = now() WHERE id = $1;
 
 -- name: CreateStorageLocation :one
-INSERT INTO storage_locations (asset_id, provider_id, layer, provider_key, url, status)
+INSERT INTO storage_locations (asset_id, account_id, layer, status, remote_path, remote_url)
 VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
--- name: GetServingLocationURL :one
-SELECT url FROM storage_locations
-WHERE asset_id = $1 AND layer = 'serving' AND status = 'stored' AND url IS NOT NULL
+-- name: UpdateStorageLocationStatus :exec
+UPDATE storage_locations
+SET status = $2, remote_path = $3, remote_url = $4, error = $5, updated_at = now()
+WHERE id = $1;
+
+-- name: GetServingLocation :one
+SELECT * FROM storage_locations
+WHERE asset_id = $1 AND layer = 'serving' AND status = 'stored'
 LIMIT 1;
 
--- name: EnqueueArchiveJob :exec
-INSERT INTO archive_sync_jobs (asset_id, target_layer)
-VALUES ($1, 'archive')
-ON CONFLICT (asset_id, target_layer) WHERE status IN ('pending', 'running') DO NOTHING;
+-- name: GetArchiveLocation :one
+SELECT * FROM storage_locations
+WHERE asset_id = $1 AND layer = 'archive' AND status = 'stored'
+LIMIT 1;
+
+-- name: ListLocationsByAsset :many
+SELECT * FROM storage_locations WHERE asset_id = $1 ORDER BY created_at;

@@ -7,83 +7,66 @@ package db
 
 import (
 	"context"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createFolder = `-- name: CreateFolder :one
-INSERT INTO folders (space_id, parent_id, owner_id, name, path)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, space_id, parent_id, owner_id, name, path, created_at, updated_at
+INSERT INTO folders (space_id, parent_id, name)
+VALUES ($1, $2, $3)
+RETURNING id, space_id, parent_id, name, created_at, updated_at, deleted_at
 `
 
 type CreateFolderParams struct {
-	SpaceID  int64  `json:"space_id"`
-	ParentID *int64 `json:"parent_id"`
-	OwnerID  int64  `json:"owner_id"`
-	Name     string `json:"name"`
-	Path     string `json:"path"`
+	SpaceID  uuid.UUID   `json:"space_id"`
+	ParentID pgtype.UUID `json:"parent_id"`
+	Name     string      `json:"name"`
 }
 
 func (q *Queries) CreateFolder(ctx context.Context, arg CreateFolderParams) (Folder, error) {
-	row := q.db.QueryRow(ctx, createFolder,
-		arg.SpaceID,
-		arg.ParentID,
-		arg.OwnerID,
-		arg.Name,
-		arg.Path,
-	)
+	row := q.db.QueryRow(ctx, createFolder, arg.SpaceID, arg.ParentID, arg.Name)
 	var i Folder
 	err := row.Scan(
 		&i.ID,
 		&i.SpaceID,
 		&i.ParentID,
-		&i.OwnerID,
 		&i.Name,
-		&i.Path,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
-const deleteFolder = `-- name: DeleteFolder :exec
-DELETE FROM folders WHERE id = $1
+const getFolderAncestors = `-- name: GetFolderAncestors :many
+WITH RECURSIVE ancestors AS (
+    SELECT f.id, f.space_id, f.parent_id, f.name, 0 AS depth
+    FROM folders f WHERE f.id = $1
+    UNION ALL
+    SELECT f.id, f.space_id, f.parent_id, f.name, a.depth + 1
+    FROM folders f
+    JOIN ancestors a ON f.id = a.parent_id
+)
+SELECT ancestors.id, ancestors.name, ancestors.depth FROM ancestors ORDER BY ancestors.depth DESC
 `
 
-func (q *Queries) DeleteFolder(ctx context.Context, id int64) error {
-	_, err := q.db.Exec(ctx, deleteFolder, id)
-	return err
+type GetFolderAncestorsRow struct {
+	ID    uuid.UUID `json:"id"`
+	Name  string    `json:"name"`
+	Depth int32     `json:"depth"`
 }
 
-const getFolderBreadcrumb = `-- name: GetFolderBreadcrumb :many
-SELECT id, name, parent_id, path FROM folders
-WHERE id = ANY($1::bigint[])
-ORDER BY path
-`
-
-type GetFolderBreadcrumbRow struct {
-	ID       int64  `json:"id"`
-	Name     string `json:"name"`
-	ParentID *int64 `json:"parent_id"`
-	Path     string `json:"path"`
-}
-
-// Returns ancestor folders for breadcrumb display. Caller passes comma-separated
-// IDs parsed from the folder's path field.
-func (q *Queries) GetFolderBreadcrumb(ctx context.Context, dollar_1 []int64) ([]GetFolderBreadcrumbRow, error) {
-	rows, err := q.db.Query(ctx, getFolderBreadcrumb, dollar_1)
+func (q *Queries) GetFolderAncestors(ctx context.Context, id uuid.UUID) ([]GetFolderAncestorsRow, error) {
+	rows, err := q.db.Query(ctx, getFolderAncestors, id)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []GetFolderBreadcrumbRow{}
+	items := []GetFolderAncestorsRow{}
 	for rows.Next() {
-		var i GetFolderBreadcrumbRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.ParentID,
-			&i.Path,
-		); err != nil {
+		var i GetFolderAncestorsRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.Depth); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -95,76 +78,33 @@ func (q *Queries) GetFolderBreadcrumb(ctx context.Context, dollar_1 []int64) ([]
 }
 
 const getFolderByID = `-- name: GetFolderByID :one
-SELECT id, space_id, parent_id, owner_id, name, path, created_at, updated_at FROM folders WHERE id = $1
+SELECT id, space_id, parent_id, name, created_at, updated_at, deleted_at FROM folders WHERE id = $1 AND deleted_at IS NULL
 `
 
-func (q *Queries) GetFolderByID(ctx context.Context, id int64) (Folder, error) {
+func (q *Queries) GetFolderByID(ctx context.Context, id uuid.UUID) (Folder, error) {
 	row := q.db.QueryRow(ctx, getFolderByID, id)
 	var i Folder
 	err := row.Scan(
 		&i.ID,
 		&i.SpaceID,
 		&i.ParentID,
-		&i.OwnerID,
 		&i.Name,
-		&i.Path,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
-const listFolderSubtree = `-- name: ListFolderSubtree :many
-SELECT id, space_id, parent_id, owner_id, name, path, created_at, updated_at FROM folders
-WHERE space_id = $1 AND path LIKE $2
-ORDER BY path, name
-`
-
-type ListFolderSubtreeParams struct {
-	SpaceID int64  `json:"space_id"`
-	Path    string `json:"path"`
-}
-
-// Returns all descendants of a folder by matching the materialized path prefix.
-// The path pattern should be passed as '/parentId/%' (e.g. '/5/%' or '/5/12/%').
-func (q *Queries) ListFolderSubtree(ctx context.Context, arg ListFolderSubtreeParams) ([]Folder, error) {
-	rows, err := q.db.Query(ctx, listFolderSubtree, arg.SpaceID, arg.Path)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Folder{}
-	for rows.Next() {
-		var i Folder
-		if err := rows.Scan(
-			&i.ID,
-			&i.SpaceID,
-			&i.ParentID,
-			&i.OwnerID,
-			&i.Name,
-			&i.Path,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listFoldersByParent = `-- name: ListFoldersByParent :many
-SELECT id, space_id, parent_id, owner_id, name, path, created_at, updated_at FROM folders
-WHERE space_id = $1 AND parent_id = $2
+SELECT id, space_id, parent_id, name, created_at, updated_at, deleted_at FROM folders
+WHERE space_id = $1 AND parent_id = $2 AND deleted_at IS NULL
 ORDER BY name
 `
 
 type ListFoldersByParentParams struct {
-	SpaceID  int64  `json:"space_id"`
-	ParentID *int64 `json:"parent_id"`
+	SpaceID  uuid.UUID   `json:"space_id"`
+	ParentID pgtype.UUID `json:"parent_id"`
 }
 
 func (q *Queries) ListFoldersByParent(ctx context.Context, arg ListFoldersByParentParams) ([]Folder, error) {
@@ -180,11 +120,10 @@ func (q *Queries) ListFoldersByParent(ctx context.Context, arg ListFoldersByPare
 			&i.ID,
 			&i.SpaceID,
 			&i.ParentID,
-			&i.OwnerID,
 			&i.Name,
-			&i.Path,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -197,12 +136,12 @@ func (q *Queries) ListFoldersByParent(ctx context.Context, arg ListFoldersByPare
 }
 
 const listRootFolders = `-- name: ListRootFolders :many
-SELECT id, space_id, parent_id, owner_id, name, path, created_at, updated_at FROM folders
-WHERE space_id = $1 AND parent_id IS NULL
+SELECT id, space_id, parent_id, name, created_at, updated_at, deleted_at FROM folders
+WHERE space_id = $1 AND parent_id IS NULL AND deleted_at IS NULL
 ORDER BY name
 `
 
-func (q *Queries) ListRootFolders(ctx context.Context, spaceID int64) ([]Folder, error) {
+func (q *Queries) ListRootFolders(ctx context.Context, spaceID uuid.UUID) ([]Folder, error) {
 	rows, err := q.db.Query(ctx, listRootFolders, spaceID)
 	if err != nil {
 		return nil, err
@@ -215,11 +154,10 @@ func (q *Queries) ListRootFolders(ctx context.Context, spaceID int64) ([]Folder,
 			&i.ID,
 			&i.SpaceID,
 			&i.ParentID,
-			&i.OwnerID,
 			&i.Name,
-			&i.Path,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -231,67 +169,48 @@ func (q *Queries) ListRootFolders(ctx context.Context, spaceID int64) ([]Folder,
 	return items, nil
 }
 
-const updateFolderName = `-- name: UpdateFolderName :one
-UPDATE folders SET name = $2 WHERE id = $1 RETURNING id, space_id, parent_id, owner_id, name, path, created_at, updated_at
+const moveFolder = `-- name: MoveFolder :exec
+UPDATE folders SET parent_id = $2, updated_at = now() WHERE id = $1
 `
 
-type UpdateFolderNameParams struct {
-	ID   int64  `json:"id"`
-	Name string `json:"name"`
+type MoveFolderParams struct {
+	ID       uuid.UUID   `json:"id"`
+	ParentID pgtype.UUID `json:"parent_id"`
 }
 
-func (q *Queries) UpdateFolderName(ctx context.Context, arg UpdateFolderNameParams) (Folder, error) {
-	row := q.db.QueryRow(ctx, updateFolderName, arg.ID, arg.Name)
-	var i Folder
-	err := row.Scan(
-		&i.ID,
-		&i.SpaceID,
-		&i.ParentID,
-		&i.OwnerID,
-		&i.Name,
-		&i.Path,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+func (q *Queries) MoveFolder(ctx context.Context, arg MoveFolderParams) error {
+	_, err := q.db.Exec(ctx, moveFolder, arg.ID, arg.ParentID)
+	return err
 }
 
-const updateFolderParent = `-- name: UpdateFolderParent :one
-UPDATE folders SET parent_id = $2, path = $3 WHERE id = $1 RETURNING id, space_id, parent_id, owner_id, name, path, created_at, updated_at
+const renameFolder = `-- name: RenameFolder :exec
+UPDATE folders SET name = $2, updated_at = now() WHERE id = $1
 `
 
-type UpdateFolderParentParams struct {
-	ID       int64  `json:"id"`
-	ParentID *int64 `json:"parent_id"`
-	Path     string `json:"path"`
+type RenameFolderParams struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
 }
 
-func (q *Queries) UpdateFolderParent(ctx context.Context, arg UpdateFolderParentParams) (Folder, error) {
-	row := q.db.QueryRow(ctx, updateFolderParent, arg.ID, arg.ParentID, arg.Path)
-	var i Folder
-	err := row.Scan(
-		&i.ID,
-		&i.SpaceID,
-		&i.ParentID,
-		&i.OwnerID,
-		&i.Name,
-		&i.Path,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+func (q *Queries) RenameFolder(ctx context.Context, arg RenameFolderParams) error {
+	_, err := q.db.Exec(ctx, renameFolder, arg.ID, arg.Name)
+	return err
 }
 
-const updateFolderPath = `-- name: UpdateFolderPath :exec
-UPDATE folders SET path = $2 WHERE id = $1
+const restoreFolder = `-- name: RestoreFolder :exec
+UPDATE folders SET deleted_at = NULL, updated_at = now() WHERE id = $1
 `
 
-type UpdateFolderPathParams struct {
-	ID   int64  `json:"id"`
-	Path string `json:"path"`
+func (q *Queries) RestoreFolder(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, restoreFolder, id)
+	return err
 }
 
-func (q *Queries) UpdateFolderPath(ctx context.Context, arg UpdateFolderPathParams) error {
-	_, err := q.db.Exec(ctx, updateFolderPath, arg.ID, arg.Path)
+const softDeleteFolder = `-- name: SoftDeleteFolder :exec
+UPDATE folders SET deleted_at = now(), updated_at = now() WHERE id = $1
+`
+
+func (q *Queries) SoftDeleteFolder(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteFolder, id)
 	return err
 }

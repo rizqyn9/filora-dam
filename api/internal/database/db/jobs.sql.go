@@ -12,88 +12,125 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const claimArchiveJob = `-- name: ClaimArchiveJob :one
+const claimNextArchiveJob = `-- name: ClaimNextArchiveJob :one
 UPDATE archive_sync_jobs
-SET status = 'running', attempts = attempts + 1, updated_at = now()
+SET status = 'processing', attempts = attempts + 1, updated_at = now()
 WHERE id = (
     SELECT id FROM archive_sync_jobs
-    WHERE status = 'pending'
+    WHERE status IN ('pending', 'failed')
+      AND attempts < max_attempts
       AND (next_retry_at IS NULL OR next_retry_at <= now())
     ORDER BY created_at
-    FOR UPDATE SKIP LOCKED
     LIMIT 1
+    FOR UPDATE SKIP LOCKED
 )
-RETURNING id, asset_id, target_layer, provider_id, status, attempts, max_attempts, last_error, next_retry_at, created_at, updated_at
+RETURNING id, asset_id, status, attempts, max_attempts, last_error, next_retry_at, completed_at, created_at, updated_at
 `
 
-// Atomically claims the next due archive job (skipping locked rows) and marks
-// it running. Returns no rows when the queue is empty.
-func (q *Queries) ClaimArchiveJob(ctx context.Context) (ArchiveSyncJob, error) {
-	row := q.db.QueryRow(ctx, claimArchiveJob)
+func (q *Queries) ClaimNextArchiveJob(ctx context.Context) (ArchiveSyncJob, error) {
+	row := q.db.QueryRow(ctx, claimNextArchiveJob)
 	var i ArchiveSyncJob
 	err := row.Scan(
 		&i.ID,
 		&i.AssetID,
-		&i.TargetLayer,
-		&i.ProviderID,
 		&i.Status,
 		&i.Attempts,
 		&i.MaxAttempts,
 		&i.LastError,
 		&i.NextRetryAt,
+		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const getArchiveSource = `-- name: GetArchiveSource :one
-SELECT a.size, a.mime_type, sl.provider_id, sl.provider_key
-FROM assets a
-JOIN storage_locations sl
-  ON sl.asset_id = a.id AND sl.layer = 'serving' AND sl.status = 'stored'
-WHERE a.id = $1
-LIMIT 1
+const completeArchiveJob = `-- name: CompleteArchiveJob :exec
+UPDATE archive_sync_jobs
+SET status = 'completed', completed_at = now(), updated_at = now()
+WHERE id = $1
 `
 
-type GetArchiveSourceRow struct {
-	Size        int64  `json:"size"`
-	MimeType    string `json:"mime_type"`
-	ProviderID  int64  `json:"provider_id"`
-	ProviderKey string `json:"provider_key"`
+func (q *Queries) CompleteArchiveJob(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, completeArchiveJob, id)
+	return err
 }
 
-func (q *Queries) GetArchiveSource(ctx context.Context, id uuid.UUID) (GetArchiveSourceRow, error) {
-	row := q.db.QueryRow(ctx, getArchiveSource, id)
-	var i GetArchiveSourceRow
+const createArchiveSyncJob = `-- name: CreateArchiveSyncJob :one
+INSERT INTO archive_sync_jobs (asset_id)
+VALUES ($1)
+RETURNING id, asset_id, status, attempts, max_attempts, last_error, next_retry_at, completed_at, created_at, updated_at
+`
+
+func (q *Queries) CreateArchiveSyncJob(ctx context.Context, assetID uuid.UUID) (ArchiveSyncJob, error) {
+	row := q.db.QueryRow(ctx, createArchiveSyncJob, assetID)
+	var i ArchiveSyncJob
 	err := row.Scan(
-		&i.Size,
-		&i.MimeType,
-		&i.ProviderID,
-		&i.ProviderKey,
+		&i.ID,
+		&i.AssetID,
+		&i.Status,
+		&i.Attempts,
+		&i.MaxAttempts,
+		&i.LastError,
+		&i.NextRetryAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const markArchiveJobResult = `-- name: MarkArchiveJobResult :exec
+const failArchiveJob = `-- name: FailArchiveJob :exec
 UPDATE archive_sync_jobs
-SET status = $2, last_error = $3, next_retry_at = $4, updated_at = now()
+SET status = 'failed', last_error = $2, next_retry_at = $3, updated_at = now()
 WHERE id = $1
 `
 
-type MarkArchiveJobResultParams struct {
+type FailArchiveJobParams struct {
 	ID          int64              `json:"id"`
-	Status      JobStatus          `json:"status"`
 	LastError   *string            `json:"last_error"`
 	NextRetryAt pgtype.Timestamptz `json:"next_retry_at"`
 }
 
-func (q *Queries) MarkArchiveJobResult(ctx context.Context, arg MarkArchiveJobResultParams) error {
-	_, err := q.db.Exec(ctx, markArchiveJobResult,
-		arg.ID,
-		arg.Status,
-		arg.LastError,
-		arg.NextRetryAt,
-	)
+func (q *Queries) FailArchiveJob(ctx context.Context, arg FailArchiveJobParams) error {
+	_, err := q.db.Exec(ctx, failArchiveJob, arg.ID, arg.LastError, arg.NextRetryAt)
 	return err
+}
+
+const listPendingArchiveJobs = `-- name: ListPendingArchiveJobs :many
+SELECT id, asset_id, status, attempts, max_attempts, last_error, next_retry_at, completed_at, created_at, updated_at FROM archive_sync_jobs
+WHERE status IN ('pending', 'failed') AND attempts < max_attempts
+ORDER BY created_at
+LIMIT $1
+`
+
+func (q *Queries) ListPendingArchiveJobs(ctx context.Context, limit int32) ([]ArchiveSyncJob, error) {
+	rows, err := q.db.Query(ctx, listPendingArchiveJobs, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ArchiveSyncJob{}
+	for rows.Next() {
+		var i ArchiveSyncJob
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssetID,
+			&i.Status,
+			&i.Attempts,
+			&i.MaxAttempts,
+			&i.LastError,
+			&i.NextRetryAt,
+			&i.CompletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

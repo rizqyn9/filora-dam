@@ -7,7 +7,6 @@ package db
 import (
 	"database/sql/driver"
 	"fmt"
-	"net/netip"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,8 +18,8 @@ type InvitationStatus string
 const (
 	InvitationStatusPending  InvitationStatus = "pending"
 	InvitationStatusAccepted InvitationStatus = "accepted"
-	InvitationStatusRevoked  InvitationStatus = "revoked"
 	InvitationStatusExpired  InvitationStatus = "expired"
+	InvitationStatusRevoked  InvitationStatus = "revoked"
 )
 
 func (e *InvitationStatus) Scan(src interface{}) error {
@@ -56,50 +55,6 @@ func (ns NullInvitationStatus) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.InvitationStatus), nil
-}
-
-type JobStatus string
-
-const (
-	JobStatusPending   JobStatus = "pending"
-	JobStatusRunning   JobStatus = "running"
-	JobStatusCompleted JobStatus = "completed"
-	JobStatusFailed    JobStatus = "failed"
-)
-
-func (e *JobStatus) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = JobStatus(s)
-	case string:
-		*e = JobStatus(s)
-	default:
-		return fmt.Errorf("unsupported scan type for JobStatus: %T", src)
-	}
-	return nil
-}
-
-type NullJobStatus struct {
-	JobStatus JobStatus `json:"job_status"`
-	Valid     bool      `json:"valid"` // Valid is true if JobStatus is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullJobStatus) Scan(value interface{}) error {
-	if value == nil {
-		ns.JobStatus, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.JobStatus.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullJobStatus) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.JobStatus), nil
 }
 
 type LocationStatus string
@@ -145,89 +100,47 @@ func (ns NullLocationStatus) Value() (driver.Value, error) {
 	return string(ns.LocationStatus), nil
 }
 
-type MemberRole string
+type MembershipRole string
 
 const (
-	MemberRoleOwner  MemberRole = "owner"
-	MemberRoleEditor MemberRole = "editor"
-	MemberRoleViewer MemberRole = "viewer"
+	MembershipRoleOwner  MembershipRole = "owner"
+	MembershipRoleEditor MembershipRole = "editor"
+	MembershipRoleViewer MembershipRole = "viewer"
 )
 
-func (e *MemberRole) Scan(src interface{}) error {
+func (e *MembershipRole) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
-		*e = MemberRole(s)
+		*e = MembershipRole(s)
 	case string:
-		*e = MemberRole(s)
+		*e = MembershipRole(s)
 	default:
-		return fmt.Errorf("unsupported scan type for MemberRole: %T", src)
+		return fmt.Errorf("unsupported scan type for MembershipRole: %T", src)
 	}
 	return nil
 }
 
-type NullMemberRole struct {
-	MemberRole MemberRole `json:"member_role"`
-	Valid      bool       `json:"valid"` // Valid is true if MemberRole is not NULL
+type NullMembershipRole struct {
+	MembershipRole MembershipRole `json:"membership_role"`
+	Valid          bool           `json:"valid"` // Valid is true if MembershipRole is not NULL
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullMemberRole) Scan(value interface{}) error {
+func (ns *NullMembershipRole) Scan(value interface{}) error {
 	if value == nil {
-		ns.MemberRole, ns.Valid = "", false
+		ns.MembershipRole, ns.Valid = "", false
 		return nil
 	}
 	ns.Valid = true
-	return ns.MemberRole.Scan(value)
+	return ns.MembershipRole.Scan(value)
 }
 
 // Value implements the driver Valuer interface.
-func (ns NullMemberRole) Value() (driver.Value, error) {
+func (ns NullMembershipRole) Value() (driver.Value, error) {
 	if !ns.Valid {
 		return nil, nil
 	}
-	return string(ns.MemberRole), nil
-}
-
-type PermissionScope string
-
-const (
-	PermissionScopeOwn PermissionScope = "own"
-	PermissionScopeAll PermissionScope = "all"
-)
-
-func (e *PermissionScope) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = PermissionScope(s)
-	case string:
-		*e = PermissionScope(s)
-	default:
-		return fmt.Errorf("unsupported scan type for PermissionScope: %T", src)
-	}
-	return nil
-}
-
-type NullPermissionScope struct {
-	PermissionScope PermissionScope `json:"permission_scope"`
-	Valid           bool            `json:"valid"` // Valid is true if PermissionScope is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullPermissionScope) Scan(value interface{}) error {
-	if value == nil {
-		ns.PermissionScope, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.PermissionScope.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullPermissionScope) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.PermissionScope), nil
+	return string(ns.MembershipRole), nil
 }
 
 type StorageLayer string
@@ -272,203 +185,188 @@ func (ns NullStorageLayer) Value() (driver.Value, error) {
 	return string(ns.StorageLayer), nil
 }
 
+type StorageProvider string
+
+const (
+	StorageProviderCloudinary StorageProvider = "cloudinary"
+	StorageProviderImagekit   StorageProvider = "imagekit"
+	StorageProviderR2         StorageProvider = "r2"
+	StorageProviderGcs        StorageProvider = "gcs"
+)
+
+func (e *StorageProvider) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = StorageProvider(s)
+	case string:
+		*e = StorageProvider(s)
+	default:
+		return fmt.Errorf("unsupported scan type for StorageProvider: %T", src)
+	}
+	return nil
+}
+
+type NullStorageProvider struct {
+	StorageProvider StorageProvider `json:"storage_provider"`
+	Valid           bool            `json:"valid"` // Valid is true if StorageProvider is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullStorageProvider) Scan(value interface{}) error {
+	if value == nil {
+		ns.StorageProvider, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.StorageProvider.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullStorageProvider) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.StorageProvider), nil
+}
+
 type ArchiveSyncJob struct {
 	ID          int64              `json:"id"`
 	AssetID     uuid.UUID          `json:"asset_id"`
-	TargetLayer StorageLayer       `json:"target_layer"`
-	ProviderID  *int64             `json:"provider_id"`
-	Status      JobStatus          `json:"status"`
+	Status      string             `json:"status"`
 	Attempts    int32              `json:"attempts"`
 	MaxAttempts int32              `json:"max_attempts"`
 	LastError   *string            `json:"last_error"`
 	NextRetryAt pgtype.Timestamptz `json:"next_retry_at"`
+	CompletedAt pgtype.Timestamptz `json:"completed_at"`
 	CreatedAt   time.Time          `json:"created_at"`
 	UpdatedAt   time.Time          `json:"updated_at"`
 }
 
 type Asset struct {
-	ID         uuid.UUID          `json:"id"`
-	SpaceID    int64              `json:"space_id"`
-	FolderID   *int64             `json:"folder_id"`
-	UploadedBy *int64             `json:"uploaded_by"`
-	Name       string             `json:"name"`
-	Type       string             `json:"type"`
-	MimeType   string             `json:"mime_type"`
-	Size       int64              `json:"size"`
-	Hash       string             `json:"hash"`
-	Metadata   []byte             `json:"metadata"`
-	DeletedAt  pgtype.Timestamptz `json:"deleted_at"`
-	DeletedBy  *int64             `json:"deleted_by"`
-	CreatedAt  time.Time          `json:"created_at"`
-	UpdatedAt  time.Time          `json:"updated_at"`
+	ID               uuid.UUID `json:"id"`
+	OriginalFilename string    `json:"original_filename"`
+	Name             string    `json:"name"`
+	MimeType         string    `json:"mime_type"`
+	SizeBytes        int64     `json:"size_bytes"`
+	ChecksumSha256   string    `json:"checksum_sha256"`
+	Width            *int32    `json:"width"`
+	Height           *int32    `json:"height"`
+	UploadedBy       int64     `json:"uploaded_by"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+type AssetReference struct {
+	ID        int64              `json:"id"`
+	AssetID   uuid.UUID          `json:"asset_id"`
+	SpaceID   uuid.UUID          `json:"space_id"`
+	FolderID  pgtype.UUID        `json:"folder_id"`
+	CreatedAt time.Time          `json:"created_at"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type AssetTag struct {
-	AssetID   uuid.UUID `json:"asset_id"`
-	TagID     int64     `json:"tag_id"`
-	CreatedAt time.Time `json:"created_at"`
-}
-
-type ClerkWebhookEvent struct {
-	ID          int64              `json:"id"`
-	EventID     string             `json:"event_id"`
-	EventType   string             `json:"event_type"`
-	Payload     []byte             `json:"payload"`
-	ProcessedAt pgtype.Timestamptz `json:"processed_at"`
-	Error       *string            `json:"error"`
-	ReceivedAt  time.Time          `json:"received_at"`
+	AssetID uuid.UUID `json:"asset_id"`
+	TagID   int64     `json:"tag_id"`
 }
 
 type CliSession struct {
-	ID         uuid.UUID          `json:"id"`
+	ID         int64              `json:"id"`
 	UserID     int64              `json:"user_id"`
 	TokenHash  string             `json:"token_hash"`
-	Label      *string            `json:"label"`
-	IpAddress  *netip.Addr        `json:"ip_address"`
-	UserAgent  *string            `json:"user_agent"`
-	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
-	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	Label      string             `json:"label"`
+	LastUsedAt time.Time          `json:"last_used_at"`
+	ExpiresAt  time.Time          `json:"expires_at"`
 	RevokedAt  pgtype.Timestamptz `json:"revoked_at"`
 	CreatedAt  time.Time          `json:"created_at"`
 }
 
 type Folder struct {
-	ID        int64     `json:"id"`
-	SpaceID   int64     `json:"space_id"`
-	ParentID  *int64    `json:"parent_id"`
-	OwnerID   int64     `json:"owner_id"`
-	Name      string    `json:"name"`
-	Path      string    `json:"path"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID        uuid.UUID          `json:"id"`
+	SpaceID   uuid.UUID          `json:"space_id"`
+	ParentID  pgtype.UUID        `json:"parent_id"`
+	Name      string             `json:"name"`
+	CreatedAt time.Time          `json:"created_at"`
+	UpdatedAt time.Time          `json:"updated_at"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type Invitation struct {
-	ID             int64              `json:"id"`
-	SpaceID        int64              `json:"space_id"`
-	Email          string             `json:"email"`
-	Role           MemberRole         `json:"role"`
-	Token          string             `json:"token"`
-	Status         InvitationStatus   `json:"status"`
-	InvitedBy      *int64             `json:"invited_by"`
-	AcceptedUserID *int64             `json:"accepted_user_id"`
-	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
-	AcceptedAt     pgtype.Timestamptz `json:"accepted_at"`
-	CreatedAt      time.Time          `json:"created_at"`
-	UpdatedAt      time.Time          `json:"updated_at"`
-}
-
-type Permission struct {
-	ID          int64     `json:"id"`
-	Resource    string    `json:"resource"`
-	Action      string    `json:"action"`
-	Description *string   `json:"description"`
-	CreatedAt   time.Time `json:"created_at"`
-}
-
-type Role struct {
-	ID          int64     `json:"id"`
-	Slug        string    `json:"slug"`
-	Name        string    `json:"name"`
-	Description *string   `json:"description"`
-	IsSystem    bool      `json:"is_system"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-}
-
-type RolePermission struct {
-	RoleID       int64           `json:"role_id"`
-	PermissionID int64           `json:"permission_id"`
-	Scope        PermissionScope `json:"scope"`
-	CreatedAt    time.Time       `json:"created_at"`
+	ID        int64            `json:"id"`
+	SpaceID   uuid.UUID        `json:"space_id"`
+	Email     string           `json:"email"`
+	Role      MembershipRole   `json:"role"`
+	Status    InvitationStatus `json:"status"`
+	InvitedBy int64            `json:"invited_by"`
+	ExpiresAt time.Time        `json:"expires_at"`
+	CreatedAt time.Time        `json:"created_at"`
+	UpdatedAt time.Time        `json:"updated_at"`
 }
 
 type Space struct {
-	ID           int64     `json:"id"`
-	OwnerID      int64     `json:"owner_id"`
-	Name         string    `json:"name"`
-	Description  *string   `json:"description"`
-	IsDefault    bool      `json:"is_default"`
-	StorageQuota int64     `json:"storage_quota"`
-	StorageUsed  int64     `json:"storage_used"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID                uuid.UUID `json:"id"`
+	Name              string    `json:"name"`
+	OwnerID           int64     `json:"owner_id"`
+	StorageQuotaBytes int64     `json:"storage_quota_bytes"`
+	StorageUsedBytes  int64     `json:"storage_used_bytes"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 type SpaceMember struct {
-	SpaceID   int64      `json:"space_id"`
-	UserID    int64      `json:"user_id"`
-	Role      MemberRole `json:"role"`
-	InvitedBy *int64     `json:"invited_by"`
-	CreatedAt time.Time  `json:"created_at"`
+	ID       int64          `json:"id"`
+	SpaceID  uuid.UUID      `json:"space_id"`
+	UserID   int64          `json:"user_id"`
+	Role     MembershipRole `json:"role"`
+	JoinedAt time.Time      `json:"joined_at"`
 }
 
-type StorageAccountUsage struct {
-	ID            int64        `json:"id"`
-	Name          string       `json:"name"`
-	Layer         StorageLayer `json:"layer"`
-	Type          string       `json:"type"`
-	IsActive      bool         `json:"is_active"`
-	Quota         *int64       `json:"quota"`
-	Used          int64        `json:"used"`
-	UsedPercent   interface{}  `json:"used_percent"`
-	LocationCount int64        `json:"location_count"`
-	StoredCount   int64        `json:"stored_count"`
-	PendingCount  int64        `json:"pending_count"`
-	FailedCount   int64        `json:"failed_count"`
+type StorageAccount struct {
+	ID                   int64           `json:"id"`
+	Provider             StorageProvider `json:"provider"`
+	Label                string          `json:"label"`
+	Layer                StorageLayer    `json:"layer"`
+	CredentialsEncrypted []byte          `json:"credentials_encrypted"`
+	IsActive             bool            `json:"is_active"`
+	QuotaBytes           int64           `json:"quota_bytes"`
+	UsedBytes            int64           `json:"used_bytes"`
+	CreatedAt            time.Time       `json:"created_at"`
+	UpdatedAt            time.Time       `json:"updated_at"`
 }
 
 type StorageLocation struct {
-	ID          uuid.UUID      `json:"id"`
-	AssetID     uuid.UUID      `json:"asset_id"`
-	ProviderID  int64          `json:"provider_id"`
-	Layer       StorageLayer   `json:"layer"`
-	ProviderKey string         `json:"provider_key"`
-	Url         *string        `json:"url"`
-	Status      LocationStatus `json:"status"`
-	Metadata    []byte         `json:"metadata"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
-}
-
-type StorageProvider struct {
-	ID          int64        `json:"id"`
-	Layer       StorageLayer `json:"layer"`
-	Name        string       `json:"name"`
-	Type        string       `json:"type"`
-	Credentials []byte       `json:"credentials"`
-	Quota       *int64       `json:"quota"`
-	Used        int64        `json:"used"`
-	IsActive    bool         `json:"is_active"`
-	CreatedBy   *int64       `json:"created_by"`
-	CreatedAt   time.Time    `json:"created_at"`
-	UpdatedAt   time.Time    `json:"updated_at"`
+	ID         int64          `json:"id"`
+	AssetID    uuid.UUID      `json:"asset_id"`
+	AccountID  int64          `json:"account_id"`
+	Layer      StorageLayer   `json:"layer"`
+	Status     LocationStatus `json:"status"`
+	RemotePath *string        `json:"remote_path"`
+	RemoteUrl  *string        `json:"remote_url"`
+	Error      *string        `json:"error"`
+	CreatedAt  time.Time      `json:"created_at"`
+	UpdatedAt  time.Time      `json:"updated_at"`
 }
 
 type Tag struct {
 	ID        int64     `json:"id"`
-	SpaceID   int64     `json:"space_id"`
+	SpaceID   uuid.UUID `json:"space_id"`
 	Name      string    `json:"name"`
-	CreatedBy *int64    `json:"created_by"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type User struct {
+	ID        int64     `json:"id"`
+	ClerkID   string    `json:"clerk_id"`
+	Email     string    `json:"email"`
+	Name      string    `json:"name"`
+	AvatarUrl *string   `json:"avatar_url"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-type User struct {
-	ID          int64              `json:"id"`
-	ClerkUserID string             `json:"clerk_user_id"`
-	Email       string             `json:"email"`
-	Name        string             `json:"name"`
-	AvatarUrl   *string            `json:"avatar_url"`
-	IsActive    bool               `json:"is_active"`
-	LastSeenAt  pgtype.Timestamptz `json:"last_seen_at"`
-	CreatedAt   time.Time          `json:"created_at"`
-	UpdatedAt   time.Time          `json:"updated_at"`
-}
-
 type UserRole struct {
+	ID        int64     `json:"id"`
 	UserID    int64     `json:"user_id"`
-	RoleID    int64     `json:"role_id"`
-	GrantedBy *int64    `json:"granted_by"`
+	RoleName  string    `json:"role_name"`
 	CreatedAt time.Time `json:"created_at"`
 }

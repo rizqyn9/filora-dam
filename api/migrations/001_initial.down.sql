@@ -1,0 +1,20 @@
+DROP TABLE IF EXISTS cli_sessions;
+DROP TABLE IF EXISTS archive_sync_jobs;
+DROP TABLE IF EXISTS storage_locations;
+DROP TABLE IF EXISTS storage_accounts;
+DROP TABLE IF EXISTS asset_tags;
+DROP TABLE IF EXISTS tags;
+DROP TABLE IF EXISTS asset_references;
+DROP TABLE IF EXISTS assets;
+DROP TABLE IF EXISTS folders;
+DROP TABLE IF EXISTS invitations;
+DROP TABLE IF EXISTS space_members;
+DROP TABLE IF EXISTS spaces;
+DROP TABLE IF EXISTS user_roles;
+DROP TABLE IF EXISTS users;
+
+DROP TYPE IF EXISTS invitation_status;
+DROP TYPE IF EXISTS membership_role;
+DROP TYPE IF EXISTS location_status;
+DROP TYPE IF EXISTS storage_layer;
+DROP TYPE IF EXISTS storage_provider;

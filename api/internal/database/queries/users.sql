@@ -1,43 +1,33 @@
 -- name: GetUserByID :one
-SELECT * FROM users
-WHERE id = $1;
+SELECT * FROM users WHERE id = $1;
 
 -- name: GetUserByClerkID :one
-SELECT * FROM users
-WHERE clerk_user_id = $1;
+SELECT * FROM users WHERE clerk_id = $1;
 
 -- name: GetUserByEmail :one
-SELECT * FROM users
-WHERE email = $1;
+SELECT * FROM users WHERE email = $1;
 
 -- name: CreateUser :one
-INSERT INTO users (clerk_user_id, email, name, avatar_url)
+INSERT INTO users (clerk_id, email, name, avatar_url)
 VALUES ($1, $2, $3, $4)
 RETURNING *;
 
--- name: UpsertUserByClerkID :one
-INSERT INTO users (clerk_user_id, email, name, avatar_url)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (clerk_user_id) DO UPDATE
-SET email = EXCLUDED.email,
-    name = EXCLUDED.name,
-    avatar_url = EXCLUDED.avatar_url,
-    is_active = TRUE
+-- name: UpdateUser :one
+UPDATE users
+SET email = $2, name = $3, avatar_url = $4, updated_at = now()
+WHERE clerk_id = $1
 RETURNING *;
 
--- name: UpdateUserProfile :one
-UPDATE users
-SET name = $2,
-    avatar_url = $3
-WHERE id = $1
-RETURNING *;
+-- name: DeleteUserByClerkID :exec
+DELETE FROM users WHERE clerk_id = $1;
 
--- name: DeactivateUserByClerkID :exec
-UPDATE users
-SET is_active = FALSE
-WHERE clerk_user_id = $1;
+-- name: ListUserRoles :many
+SELECT role_name FROM user_roles WHERE user_id = $1;
 
--- name: TouchUserLastSeen :exec
-UPDATE users
-SET last_seen_at = now()
-WHERE id = $1;
+-- name: AssignRole :exec
+INSERT INTO user_roles (user_id, role_name)
+VALUES ($1, $2)
+ON CONFLICT (user_id, role_name) DO NOTHING;
+
+-- name: RevokeRole :exec
+DELETE FROM user_roles WHERE user_id = $1 AND role_name = $2;

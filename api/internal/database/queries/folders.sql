@@ -1,43 +1,40 @@
--- name: CreateFolder :one
-INSERT INTO folders (space_id, parent_id, owner_id, name, path)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING *;
-
 -- name: GetFolderByID :one
-SELECT * FROM folders WHERE id = $1;
+SELECT * FROM folders WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: ListFoldersByParent :many
 SELECT * FROM folders
-WHERE space_id = $1 AND parent_id = $2
+WHERE space_id = $1 AND parent_id = $2 AND deleted_at IS NULL
 ORDER BY name;
 
 -- name: ListRootFolders :many
 SELECT * FROM folders
-WHERE space_id = $1 AND parent_id IS NULL
+WHERE space_id = $1 AND parent_id IS NULL AND deleted_at IS NULL
 ORDER BY name;
 
--- name: UpdateFolderName :one
-UPDATE folders SET name = $2 WHERE id = $1 RETURNING *;
+-- name: CreateFolder :one
+INSERT INTO folders (space_id, parent_id, name)
+VALUES ($1, $2, $3)
+RETURNING *;
 
--- name: UpdateFolderParent :one
-UPDATE folders SET parent_id = $2, path = $3 WHERE id = $1 RETURNING *;
+-- name: RenameFolder :exec
+UPDATE folders SET name = $2, updated_at = now() WHERE id = $1;
 
--- name: UpdateFolderPath :exec
-UPDATE folders SET path = $2 WHERE id = $1;
+-- name: MoveFolder :exec
+UPDATE folders SET parent_id = $2, updated_at = now() WHERE id = $1;
 
--- name: ListFolderSubtree :many
--- Returns all descendants of a folder by matching the materialized path prefix.
--- The path pattern should be passed as '/parentId/%' (e.g. '/5/%' or '/5/12/%').
-SELECT * FROM folders
-WHERE space_id = $1 AND path LIKE $2
-ORDER BY path, name;
+-- name: SoftDeleteFolder :exec
+UPDATE folders SET deleted_at = now(), updated_at = now() WHERE id = $1;
 
--- name: DeleteFolder :exec
-DELETE FROM folders WHERE id = $1;
+-- name: RestoreFolder :exec
+UPDATE folders SET deleted_at = NULL, updated_at = now() WHERE id = $1;
 
--- name: GetFolderBreadcrumb :many
--- Returns ancestor folders for breadcrumb display. Caller passes comma-separated
--- IDs parsed from the folder's path field.
-SELECT id, name, parent_id, path FROM folders
-WHERE id = ANY($1::bigint[])
-ORDER BY path;
+-- name: GetFolderAncestors :many
+WITH RECURSIVE ancestors AS (
+    SELECT f.id, f.space_id, f.parent_id, f.name, 0 AS depth
+    FROM folders f WHERE f.id = $1
+    UNION ALL
+    SELECT f.id, f.space_id, f.parent_id, f.name, a.depth + 1
+    FROM folders f
+    JOIN ancestors a ON f.id = a.parent_id
+)
+SELECT ancestors.id, ancestors.name, ancestors.depth FROM ancestors ORDER BY ancestors.depth DESC;

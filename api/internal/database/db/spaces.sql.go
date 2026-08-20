@@ -9,169 +9,99 @@ import (
 	"context"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/google/uuid"
 )
 
-const addSpaceUsed = `-- name: AddSpaceUsed :exec
-UPDATE spaces SET storage_used = storage_used + $2 WHERE id = $1
+const addSpaceMember = `-- name: AddSpaceMember :one
+INSERT INTO space_members (space_id, user_id, role)
+VALUES ($1, $2, $3)
+RETURNING id, space_id, user_id, role, joined_at
 `
 
-type AddSpaceUsedParams struct {
-	ID          int64 `json:"id"`
-	StorageUsed int64 `json:"storage_used"`
+type AddSpaceMemberParams struct {
+	SpaceID uuid.UUID      `json:"space_id"`
+	UserID  int64          `json:"user_id"`
+	Role    MembershipRole `json:"role"`
 }
 
-func (q *Queries) AddSpaceUsed(ctx context.Context, arg AddSpaceUsedParams) error {
-	_, err := q.db.Exec(ctx, addSpaceUsed, arg.ID, arg.StorageUsed)
-	return err
-}
-
-const createSpace = `-- name: CreateSpace :one
-INSERT INTO spaces (owner_id, name, description, is_default)
-VALUES ($1, $2, $3, $4)
-RETURNING id, owner_id, name, description, is_default, storage_quota, storage_used, created_at, updated_at
-`
-
-type CreateSpaceParams struct {
-	OwnerID     int64   `json:"owner_id"`
-	Name        string  `json:"name"`
-	Description *string `json:"description"`
-	IsDefault   bool    `json:"is_default"`
-}
-
-func (q *Queries) CreateSpace(ctx context.Context, arg CreateSpaceParams) (Space, error) {
-	row := q.db.QueryRow(ctx, createSpace,
-		arg.OwnerID,
-		arg.Name,
-		arg.Description,
-		arg.IsDefault,
-	)
-	var i Space
-	err := row.Scan(
-		&i.ID,
-		&i.OwnerID,
-		&i.Name,
-		&i.Description,
-		&i.IsDefault,
-		&i.StorageQuota,
-		&i.StorageUsed,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const createSpaceInvitation = `-- name: CreateSpaceInvitation :one
-INSERT INTO invitations (space_id, email, role, token, invited_by, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, space_id, email, role, token, status, invited_by, accepted_user_id, expires_at, accepted_at, created_at, updated_at
-`
-
-type CreateSpaceInvitationParams struct {
-	SpaceID   int64              `json:"space_id"`
-	Email     string             `json:"email"`
-	Role      MemberRole         `json:"role"`
-	Token     string             `json:"token"`
-	InvitedBy *int64             `json:"invited_by"`
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
-}
-
-func (q *Queries) CreateSpaceInvitation(ctx context.Context, arg CreateSpaceInvitationParams) (Invitation, error) {
-	row := q.db.QueryRow(ctx, createSpaceInvitation,
-		arg.SpaceID,
-		arg.Email,
-		arg.Role,
-		arg.Token,
-		arg.InvitedBy,
-		arg.ExpiresAt,
-	)
-	var i Invitation
+func (q *Queries) AddSpaceMember(ctx context.Context, arg AddSpaceMemberParams) (SpaceMember, error) {
+	row := q.db.QueryRow(ctx, addSpaceMember, arg.SpaceID, arg.UserID, arg.Role)
+	var i SpaceMember
 	err := row.Scan(
 		&i.ID,
 		&i.SpaceID,
-		&i.Email,
+		&i.UserID,
 		&i.Role,
-		&i.Token,
-		&i.Status,
-		&i.InvitedBy,
-		&i.AcceptedUserID,
-		&i.ExpiresAt,
-		&i.AcceptedAt,
+		&i.JoinedAt,
+	)
+	return i, err
+}
+
+const createSpace = `-- name: CreateSpace :one
+INSERT INTO spaces (name, owner_id, storage_quota_bytes)
+VALUES ($1, $2, $3)
+RETURNING id, name, owner_id, storage_quota_bytes, storage_used_bytes, created_at, updated_at
+`
+
+type CreateSpaceParams struct {
+	Name              string `json:"name"`
+	OwnerID           int64  `json:"owner_id"`
+	StorageQuotaBytes int64  `json:"storage_quota_bytes"`
+}
+
+func (q *Queries) CreateSpace(ctx context.Context, arg CreateSpaceParams) (Space, error) {
+	row := q.db.QueryRow(ctx, createSpace, arg.Name, arg.OwnerID, arg.StorageQuotaBytes)
+	var i Space
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.OwnerID,
+		&i.StorageQuotaBytes,
+		&i.StorageUsedBytes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const decrementSpaceUsage = `-- name: DecrementSpaceUsage :exec
+UPDATE spaces
+SET storage_used_bytes = GREATEST(storage_used_bytes - $2, 0), updated_at = now()
+WHERE id = $1
+`
+
+type DecrementSpaceUsageParams struct {
+	ID               uuid.UUID `json:"id"`
+	StorageUsedBytes int64     `json:"storage_used_bytes"`
+}
+
+func (q *Queries) DecrementSpaceUsage(ctx context.Context, arg DecrementSpaceUsageParams) error {
+	_, err := q.db.Exec(ctx, decrementSpaceUsage, arg.ID, arg.StorageUsedBytes)
+	return err
 }
 
 const deleteSpace = `-- name: DeleteSpace :exec
 DELETE FROM spaces WHERE id = $1
 `
 
-func (q *Queries) DeleteSpace(ctx context.Context, id int64) error {
+func (q *Queries) DeleteSpace(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteSpace, id)
 	return err
 }
 
-const getDefaultSpace = `-- name: GetDefaultSpace :one
-SELECT id, owner_id, name, description, is_default, storage_quota, storage_used, created_at, updated_at FROM spaces WHERE owner_id = $1 AND is_default = TRUE
-`
-
-func (q *Queries) GetDefaultSpace(ctx context.Context, ownerID int64) (Space, error) {
-	row := q.db.QueryRow(ctx, getDefaultSpace, ownerID)
-	var i Space
-	err := row.Scan(
-		&i.ID,
-		&i.OwnerID,
-		&i.Name,
-		&i.Description,
-		&i.IsDefault,
-		&i.StorageQuota,
-		&i.StorageUsed,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getInvitationByToken = `-- name: GetInvitationByToken :one
-SELECT id, space_id, email, role, token, status, invited_by, accepted_user_id, expires_at, accepted_at, created_at, updated_at FROM invitations WHERE token = $1
-`
-
-func (q *Queries) GetInvitationByToken(ctx context.Context, token string) (Invitation, error) {
-	row := q.db.QueryRow(ctx, getInvitationByToken, token)
-	var i Invitation
-	err := row.Scan(
-		&i.ID,
-		&i.SpaceID,
-		&i.Email,
-		&i.Role,
-		&i.Token,
-		&i.Status,
-		&i.InvitedBy,
-		&i.AcceptedUserID,
-		&i.ExpiresAt,
-		&i.AcceptedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const getSpaceByID = `-- name: GetSpaceByID :one
-SELECT id, owner_id, name, description, is_default, storage_quota, storage_used, created_at, updated_at FROM spaces WHERE id = $1
+SELECT id, name, owner_id, storage_quota_bytes, storage_used_bytes, created_at, updated_at FROM spaces WHERE id = $1
 `
 
-func (q *Queries) GetSpaceByID(ctx context.Context, id int64) (Space, error) {
+func (q *Queries) GetSpaceByID(ctx context.Context, id uuid.UUID) (Space, error) {
 	row := q.db.QueryRow(ctx, getSpaceByID, id)
 	var i Space
 	err := row.Scan(
 		&i.ID,
-		&i.OwnerID,
 		&i.Name,
-		&i.Description,
-		&i.IsDefault,
-		&i.StorageQuota,
-		&i.StorageUsed,
+		&i.OwnerID,
+		&i.StorageQuotaBytes,
+		&i.StorageUsedBytes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -179,86 +109,63 @@ func (q *Queries) GetSpaceByID(ctx context.Context, id int64) (Space, error) {
 }
 
 const getSpaceMember = `-- name: GetSpaceMember :one
-SELECT space_id, user_id, role, invited_by, created_at FROM space_members WHERE space_id = $1 AND user_id = $2
+SELECT id, space_id, user_id, role, joined_at FROM space_members WHERE space_id = $1 AND user_id = $2
 `
 
 type GetSpaceMemberParams struct {
-	SpaceID int64 `json:"space_id"`
-	UserID  int64 `json:"user_id"`
+	SpaceID uuid.UUID `json:"space_id"`
+	UserID  int64     `json:"user_id"`
 }
 
 func (q *Queries) GetSpaceMember(ctx context.Context, arg GetSpaceMemberParams) (SpaceMember, error) {
 	row := q.db.QueryRow(ctx, getSpaceMember, arg.SpaceID, arg.UserID)
 	var i SpaceMember
 	err := row.Scan(
+		&i.ID,
 		&i.SpaceID,
 		&i.UserID,
 		&i.Role,
-		&i.InvitedBy,
-		&i.CreatedAt,
+		&i.JoinedAt,
 	)
 	return i, err
 }
 
-const listSpaceInvitations = `-- name: ListSpaceInvitations :many
-SELECT id, space_id, email, role, token, status, invited_by, accepted_user_id, expires_at, accepted_at, created_at, updated_at FROM invitations
-WHERE space_id = $1 AND status = 'pending'
-ORDER BY created_at DESC
+const incrementSpaceUsage = `-- name: IncrementSpaceUsage :exec
+UPDATE spaces
+SET storage_used_bytes = storage_used_bytes + $2, updated_at = now()
+WHERE id = $1
 `
 
-func (q *Queries) ListSpaceInvitations(ctx context.Context, spaceID int64) ([]Invitation, error) {
-	rows, err := q.db.Query(ctx, listSpaceInvitations, spaceID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Invitation{}
-	for rows.Next() {
-		var i Invitation
-		if err := rows.Scan(
-			&i.ID,
-			&i.SpaceID,
-			&i.Email,
-			&i.Role,
-			&i.Token,
-			&i.Status,
-			&i.InvitedBy,
-			&i.AcceptedUserID,
-			&i.ExpiresAt,
-			&i.AcceptedAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+type IncrementSpaceUsageParams struct {
+	ID               uuid.UUID `json:"id"`
+	StorageUsedBytes int64     `json:"storage_used_bytes"`
+}
+
+func (q *Queries) IncrementSpaceUsage(ctx context.Context, arg IncrementSpaceUsageParams) error {
+	_, err := q.db.Exec(ctx, incrementSpaceUsage, arg.ID, arg.StorageUsedBytes)
+	return err
 }
 
 const listSpaceMembers = `-- name: ListSpaceMembers :many
-SELECT sm.space_id, sm.user_id, sm.role, sm.created_at,
-       u.email, u.name, u.avatar_url
+SELECT sm.id, sm.space_id, sm.user_id, sm.role, sm.joined_at, u.email, u.name, u.avatar_url
 FROM space_members sm
 JOIN users u ON u.id = sm.user_id
 WHERE sm.space_id = $1
-ORDER BY sm.created_at
+ORDER BY sm.joined_at
 `
 
 type ListSpaceMembersRow struct {
-	SpaceID   int64      `json:"space_id"`
-	UserID    int64      `json:"user_id"`
-	Role      MemberRole `json:"role"`
-	CreatedAt time.Time  `json:"created_at"`
-	Email     string     `json:"email"`
-	Name      string     `json:"name"`
-	AvatarUrl *string    `json:"avatar_url"`
+	ID        int64          `json:"id"`
+	SpaceID   uuid.UUID      `json:"space_id"`
+	UserID    int64          `json:"user_id"`
+	Role      MembershipRole `json:"role"`
+	JoinedAt  time.Time      `json:"joined_at"`
+	Email     string         `json:"email"`
+	Name      string         `json:"name"`
+	AvatarUrl *string        `json:"avatar_url"`
 }
 
-func (q *Queries) ListSpaceMembers(ctx context.Context, spaceID int64) ([]ListSpaceMembersRow, error) {
+func (q *Queries) ListSpaceMembers(ctx context.Context, spaceID uuid.UUID) ([]ListSpaceMembersRow, error) {
 	rows, err := q.db.Query(ctx, listSpaceMembers, spaceID)
 	if err != nil {
 		return nil, err
@@ -268,10 +175,11 @@ func (q *Queries) ListSpaceMembers(ctx context.Context, spaceID int64) ([]ListSp
 	for rows.Next() {
 		var i ListSpaceMembersRow
 		if err := rows.Scan(
+			&i.ID,
 			&i.SpaceID,
 			&i.UserID,
 			&i.Role,
-			&i.CreatedAt,
+			&i.JoinedAt,
 			&i.Email,
 			&i.Name,
 			&i.AvatarUrl,
@@ -286,16 +194,15 @@ func (q *Queries) ListSpaceMembers(ctx context.Context, spaceID int64) ([]ListSp
 	return items, nil
 }
 
-const listSpacesForUser = `-- name: ListSpacesForUser :many
-SELECT s.id, s.owner_id, s.name, s.description, s.is_default, s.storage_quota, s.storage_used, s.created_at, s.updated_at
-FROM spaces s
+const listSpacesByMember = `-- name: ListSpacesByMember :many
+SELECT s.id, s.name, s.owner_id, s.storage_quota_bytes, s.storage_used_bytes, s.created_at, s.updated_at FROM spaces s
 JOIN space_members sm ON sm.space_id = s.id
 WHERE sm.user_id = $1
 ORDER BY s.created_at
 `
 
-func (q *Queries) ListSpacesForUser(ctx context.Context, userID int64) ([]Space, error) {
-	rows, err := q.db.Query(ctx, listSpacesForUser, userID)
+func (q *Queries) ListSpacesByMember(ctx context.Context, userID int64) ([]Space, error) {
+	rows, err := q.db.Query(ctx, listSpacesByMember, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -305,12 +212,10 @@ func (q *Queries) ListSpacesForUser(ctx context.Context, userID int64) ([]Space,
 		var i Space
 		if err := rows.Scan(
 			&i.ID,
-			&i.OwnerID,
 			&i.Name,
-			&i.Description,
-			&i.IsDefault,
-			&i.StorageQuota,
-			&i.StorageUsed,
+			&i.OwnerID,
+			&i.StorageQuotaBytes,
+			&i.StorageUsedBytes,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -324,125 +229,91 @@ func (q *Queries) ListSpacesForUser(ctx context.Context, userID int64) ([]Space,
 	return items, nil
 }
 
-const markInvitationAccepted = `-- name: MarkInvitationAccepted :exec
-UPDATE invitations
-SET status = 'accepted', accepted_user_id = $2, accepted_at = now()
-WHERE id = $1
+const listSpacesByOwner = `-- name: ListSpacesByOwner :many
+SELECT id, name, owner_id, storage_quota_bytes, storage_used_bytes, created_at, updated_at FROM spaces WHERE owner_id = $1 ORDER BY created_at
 `
 
-type MarkInvitationAcceptedParams struct {
-	ID             int64  `json:"id"`
-	AcceptedUserID *int64 `json:"accepted_user_id"`
+func (q *Queries) ListSpacesByOwner(ctx context.Context, ownerID int64) ([]Space, error) {
+	rows, err := q.db.Query(ctx, listSpacesByOwner, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Space{}
+	for rows.Next() {
+		var i Space
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.OwnerID,
+			&i.StorageQuotaBytes,
+			&i.StorageUsedBytes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
-func (q *Queries) MarkInvitationAccepted(ctx context.Context, arg MarkInvitationAcceptedParams) error {
-	_, err := q.db.Exec(ctx, markInvitationAccepted, arg.ID, arg.AcceptedUserID)
-	return err
-}
-
-const removeSpaceMember = `-- name: RemoveSpaceMember :execrows
+const removeSpaceMember = `-- name: RemoveSpaceMember :exec
 DELETE FROM space_members WHERE space_id = $1 AND user_id = $2
 `
 
 type RemoveSpaceMemberParams struct {
-	SpaceID int64 `json:"space_id"`
-	UserID  int64 `json:"user_id"`
+	SpaceID uuid.UUID `json:"space_id"`
+	UserID  int64     `json:"user_id"`
 }
 
-func (q *Queries) RemoveSpaceMember(ctx context.Context, arg RemoveSpaceMemberParams) (int64, error) {
-	result, err := q.db.Exec(ctx, removeSpaceMember, arg.SpaceID, arg.UserID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const revokeSpaceInvitation = `-- name: RevokeSpaceInvitation :execrows
-UPDATE invitations
-SET status = 'revoked'
-WHERE id = $1 AND space_id = $2 AND status = 'pending'
-`
-
-type RevokeSpaceInvitationParams struct {
-	ID      int64 `json:"id"`
-	SpaceID int64 `json:"space_id"`
-}
-
-func (q *Queries) RevokeSpaceInvitation(ctx context.Context, arg RevokeSpaceInvitationParams) (int64, error) {
-	result, err := q.db.Exec(ctx, revokeSpaceInvitation, arg.ID, arg.SpaceID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+func (q *Queries) RemoveSpaceMember(ctx context.Context, arg RemoveSpaceMemberParams) error {
+	_, err := q.db.Exec(ctx, removeSpaceMember, arg.SpaceID, arg.UserID)
+	return err
 }
 
 const updateSpace = `-- name: UpdateSpace :one
 UPDATE spaces
-SET name = $2, description = $3
+SET name = $2, storage_quota_bytes = $3, updated_at = now()
 WHERE id = $1
-RETURNING id, owner_id, name, description, is_default, storage_quota, storage_used, created_at, updated_at
+RETURNING id, name, owner_id, storage_quota_bytes, storage_used_bytes, created_at, updated_at
 `
 
 type UpdateSpaceParams struct {
-	ID          int64   `json:"id"`
-	Name        string  `json:"name"`
-	Description *string `json:"description"`
+	ID                uuid.UUID `json:"id"`
+	Name              string    `json:"name"`
+	StorageQuotaBytes int64     `json:"storage_quota_bytes"`
 }
 
 func (q *Queries) UpdateSpace(ctx context.Context, arg UpdateSpaceParams) (Space, error) {
-	row := q.db.QueryRow(ctx, updateSpace, arg.ID, arg.Name, arg.Description)
+	row := q.db.QueryRow(ctx, updateSpace, arg.ID, arg.Name, arg.StorageQuotaBytes)
 	var i Space
 	err := row.Scan(
 		&i.ID,
-		&i.OwnerID,
 		&i.Name,
-		&i.Description,
-		&i.IsDefault,
-		&i.StorageQuota,
-		&i.StorageUsed,
+		&i.OwnerID,
+		&i.StorageQuotaBytes,
+		&i.StorageUsedBytes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const updateSpaceMemberRole = `-- name: UpdateSpaceMemberRole :execrows
+const updateSpaceMemberRole = `-- name: UpdateSpaceMemberRole :exec
 UPDATE space_members SET role = $3 WHERE space_id = $1 AND user_id = $2
 `
 
 type UpdateSpaceMemberRoleParams struct {
-	SpaceID int64      `json:"space_id"`
-	UserID  int64      `json:"user_id"`
-	Role    MemberRole `json:"role"`
+	SpaceID uuid.UUID      `json:"space_id"`
+	UserID  int64          `json:"user_id"`
+	Role    MembershipRole `json:"role"`
 }
 
-func (q *Queries) UpdateSpaceMemberRole(ctx context.Context, arg UpdateSpaceMemberRoleParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateSpaceMemberRole, arg.SpaceID, arg.UserID, arg.Role)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const upsertSpaceMember = `-- name: UpsertSpaceMember :exec
-INSERT INTO space_members (space_id, user_id, role, invited_by)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (space_id, user_id) DO UPDATE SET role = EXCLUDED.role
-`
-
-type UpsertSpaceMemberParams struct {
-	SpaceID   int64      `json:"space_id"`
-	UserID    int64      `json:"user_id"`
-	Role      MemberRole `json:"role"`
-	InvitedBy *int64     `json:"invited_by"`
-}
-
-func (q *Queries) UpsertSpaceMember(ctx context.Context, arg UpsertSpaceMemberParams) error {
-	_, err := q.db.Exec(ctx, upsertSpaceMember,
-		arg.SpaceID,
-		arg.UserID,
-		arg.Role,
-		arg.InvitedBy,
-	)
+func (q *Queries) UpdateSpaceMemberRole(ctx context.Context, arg UpdateSpaceMemberRoleParams) error {
+	_, err := q.db.Exec(ctx, updateSpaceMemberRole, arg.SpaceID, arg.UserID, arg.Role)
 	return err
 }
