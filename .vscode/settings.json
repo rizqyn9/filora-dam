@@ -1,9 +1,32 @@
 {
+  "gopls": {
+    "build.directoryFilters": [
+      "-web",
+      "-cli",
+      "-docs",
+      "-.kiro"
+    ],
+    "ui.navigation.importShortcut": "Definition"
+  },
+  "go.goroot": "",
+  "go.useLanguageServer": true,
+  "go.lintTool": "golangci-lint",
+  "go.lintFlags": [
+    "--fast"
+  ],
+  "go.formatTool": "gofumpt",
   "oxc.configPath": null,
   "oxc.fmt.configPath": null,
   "oxc.enable.oxlint": true,
   "oxc.enable.oxfmt": true,
   "oxc.lint.run": "onType",
+  "[go]": {
+    "editor.defaultFormatter": "golang.go",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
+  },
   "[javascript][javascriptreact][typescript][typescriptreact]": {
     "editor.defaultFormatter": "oxc.oxc-vscode",
     "editor.formatOnSave": true,
