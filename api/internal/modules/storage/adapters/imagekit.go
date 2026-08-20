@@ -9,7 +9,6 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
-
 )
 
 type ImageKitCredentials struct {
@@ -42,7 +41,9 @@ func (a *ImageKitAdapter) Upload(ctx context.Context, input UploadInput) (*Uploa
 	if _, err := io.Copy(part, input.Body); err != nil {
 		return nil, fmt.Errorf("imagekit copy body: %w", err)
 	}
-	w.Close()
+	if err := w.Close(); err != nil {
+		return nil, fmt.Errorf("imagekit close form: %w", err)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, &buf)
 	if err != nil {
@@ -56,7 +57,7 @@ func (a *ImageKitAdapter) Upload(ctx context.Context, input UploadInput) (*Uploa
 	if err != nil {
 		return nil, fmt.Errorf("imagekit upload request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
@@ -91,7 +92,7 @@ func (a *ImageKitAdapter) Download(ctx context.Context, key string) (io.ReadClos
 		return nil, fmt.Errorf("imagekit download: %w", err)
 	}
 	if resp.StatusCode >= 400 {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, fmt.Errorf("imagekit download failed: %d", resp.StatusCode)
 	}
 	return resp.Body, nil
@@ -110,7 +111,7 @@ func (a *ImageKitAdapter) Delete(ctx context.Context, key string) error {
 	if err != nil {
 		return fmt.Errorf("imagekit delete: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("imagekit delete failed: %d", resp.StatusCode)

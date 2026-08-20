@@ -68,8 +68,8 @@ func (h *Handler) ListAssets(c fiber.Ctx) error {
 	assets, err := h.service.ListAssets(c.Context(), ListAssetsParams{
 		SpaceID:  spaceID,
 		FolderID: folderID,
-		Limit:    int32(limit),
-		Offset:   int32(offset),
+		Limit:    int32(limit),  //nolint:gosec // clamped to [1,200]
+		Offset:   int32(offset), //nolint:gosec // clamped to [0,1_000_000]
 	})
 	if err != nil {
 		h.logger.Error().Err(err).Msg("list assets failed")
@@ -114,7 +114,7 @@ func (h *Handler) Upload(c fiber.Ctx) error {
 		h.logger.Error().Err(err).Msg("open uploaded file failed")
 		return lib.JSONError(c, fiber.StatusInternalServerError, "INTERNAL_ERROR", "failed to read file")
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	contentType := file.Header.Get("Content-Type")
 	if contentType == "" {

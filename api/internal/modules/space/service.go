@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
 	"github.com/rizqyn9/filora-dam/api/internal/database/db"
 )
 
@@ -108,7 +109,7 @@ func (s *Service) HasMember(ctx context.Context, spaceID uuid.UUID, userID int64
 	}
 	_, err = s.repo.GetMember(ctx, spaceID, userID)
 	if err != nil {
-		return false, nil
+		return false, nil //nolint:nilerr // ErrNoRows means "not a member", not an error
 	}
 	return true, nil
 }

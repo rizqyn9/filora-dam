@@ -8,7 +8,7 @@
       "matcher": "\\.go$",
       "action": {
         "type": "command",
-        "command": "cd api && golangci-lint run --fix ./...",
+        "command": "cd api && golangci-lint run ./... && golangci-lint fmt ./...",
         "timeout": 30
       }
     }

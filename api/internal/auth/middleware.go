@@ -6,6 +6,7 @@ import (
 
 	"github.com/clerk/clerk-sdk-go/v2/jwt"
 	"github.com/gofiber/fiber/v3"
+
 	"github.com/rizqyn9/filora-dam/api/internal/lib"
 )
 

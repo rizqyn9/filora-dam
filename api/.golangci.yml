@@ -1,19 +1,64 @@
+version: "2"
+
 run:
-  timeout: 3m
+  timeout: 5m
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/rizqyn9/filora-dam
 
 linters:
   enable:
+    # Bugs
     - errcheck
     - govet
     - staticcheck
-    - unused
     - ineffassign
-    - gosimple
+    - bodyclose
+    - nilerr
+
+    # Style & simplicity
+    - unused
+    - gocritic
+    - misspell
+    - unconvert
+    - unparam
+
+    # Security
+    - gosec
+
+    # Performance
+    - prealloc
 
 linters-settings:
-  errcheck:
-    check-blank: false
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+    disabled-checks:
+      - hugeParam
+
+  gosec:
+    excludes:
+      - G104
+      - G304
+
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment
 
 issues:
   exclude-dirs:
-    - internal/database/db  # sqlc-generated
+    - internal/database/db
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec

@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	tokenBytes     = 32
-	sessionTTL     = 90 * 24 * time.Hour // 90 days
+	tokenBytes = 32
+	sessionTTL = 90 * 24 * time.Hour // 90 days
 )
 
 type Service struct {

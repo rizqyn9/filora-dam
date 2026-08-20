@@ -8,7 +8,6 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
-
 )
 
 type CloudinaryCredentials struct {
@@ -41,7 +40,9 @@ func (a *CloudinaryAdapter) Upload(ctx context.Context, input UploadInput) (*Upl
 	if _, err := io.Copy(part, input.Body); err != nil {
 		return nil, fmt.Errorf("cloudinary copy body: %w", err)
 	}
-	w.Close()
+	if err := w.Close(); err != nil {
+		return nil, fmt.Errorf("cloudinary close form: %w", err)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, &buf)
 	if err != nil {
@@ -54,7 +55,7 @@ func (a *CloudinaryAdapter) Upload(ctx context.Context, input UploadInput) (*Upl
 	if err != nil {
 		return nil, fmt.Errorf("cloudinary upload request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
@@ -87,7 +88,7 @@ func (a *CloudinaryAdapter) Download(ctx context.Context, key string) (io.ReadCl
 		return nil, fmt.Errorf("cloudinary download: %w", err)
 	}
 	if resp.StatusCode >= 400 {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, fmt.Errorf("cloudinary download failed: %d", resp.StatusCode)
 	}
 	return resp.Body, nil
@@ -106,7 +107,7 @@ func (a *CloudinaryAdapter) Delete(ctx context.Context, key string) error {
 	if err != nil {
 		return fmt.Errorf("cloudinary delete: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("cloudinary delete failed: %d", resp.StatusCode)

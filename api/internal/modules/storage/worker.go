@@ -7,8 +7,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/rizqyn9/filora-dam/api/internal/database/db"
 	"github.com/rs/zerolog"
+
+	"github.com/rizqyn9/filora-dam/api/internal/database/db"
 )
 
 // Worker processes archive sync jobs in a loop.
@@ -91,7 +92,7 @@ func (w *Worker) archiveAsset(ctx context.Context, assetID uuid.UUID) error {
 	if err != nil {
 		return fmt.Errorf("download from serving: %w", err)
 	}
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 
 	// 3. Get the asset record for size info
 	asset, err := w.queries.GetAssetByID(ctx, assetID)
