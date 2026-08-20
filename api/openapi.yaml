@@ -1,0 +1,812 @@
+openapi: "3.0.3"
+info:
+  title: Filora DAM API
+  version: "1.0.0"
+  description: Archive-first Digital Asset Management API.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Health
+  - name: Spaces
+  - name: Folders
+  - name: Assets
+  - name: Tags
+  - name: Sessions
+  - name: Storage
+  - name: Webhooks
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /webhooks/clerk:
+    post:
+      tags: [Webhooks]
+      summary: Clerk user sync webhook
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Processed
+
+  /api/v1/spaces:
+    get:
+      tags: [Spaces]
+      summary: List spaces
+      responses:
+        "200":
+          description: List of spaces
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      tags: [Spaces]
+      summary: Create space
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSpaceRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /api/v1/spaces/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Spaces]
+      summary: Get space
+      responses:
+        "200":
+          description: Space details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Spaces]
+      summary: Update space
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSpaceRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    delete:
+      tags: [Spaces]
+      summary: Delete space
+      responses:
+        "204":
+          description: Deleted
+
+  /api/v1/folders:
+    get:
+      tags: [Folders]
+      summary: List folders
+      parameters:
+        - name: space_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: parent_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Folders list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      tags: [Folders]
+      summary: Create folder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFolderRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /api/v1/folders/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Folders]
+      summary: Get folder
+      responses:
+        "200":
+          description: Folder details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    delete:
+      tags: [Folders]
+      summary: Soft-delete folder
+      responses:
+        "204":
+          description: Trashed
+
+  /api/v1/folders/{id}/rename:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [Folders]
+      summary: Rename folder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenameFolderRequest"
+      responses:
+        "200":
+          description: Renamed
+
+  /api/v1/folders/{id}/move:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [Folders]
+      summary: Move folder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MoveFolderRequest"
+      responses:
+        "200":
+          description: Moved
+
+  /api/v1/folders/{id}/restore:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Folders]
+      summary: Restore folder
+      responses:
+        "200":
+          description: Restored
+
+  /api/v1/folders/{id}/breadcrumbs:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Folders]
+      summary: Get breadcrumbs
+      responses:
+        "200":
+          description: Ancestor list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /api/v1/assets:
+    get:
+      tags: [Assets]
+      summary: List assets
+      parameters:
+        - name: space_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: folder_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Assets list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /api/v1/assets/upload:
+    post:
+      tags: [Assets]
+      summary: Upload file
+      description: Multipart upload with global SHA-256 dedup.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [space_id, file]
+              properties:
+                space_id:
+                  type: string
+                  format: uuid
+                folder_id:
+                  type: string
+                  format: uuid
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Asset created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "422":
+          description: Quota exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/assets/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Assets]
+      summary: Get asset
+      responses:
+        "200":
+          description: Asset details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/assets/{id}/rename:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [Assets]
+      summary: Rename asset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+      responses:
+        "200":
+          description: Renamed
+
+  /api/v1/assets/references:
+    post:
+      tags: [Assets]
+      summary: Create asset reference
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReferenceRequest"
+      responses:
+        "201":
+          description: Reference created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /api/v1/assets/references/{ref_id}:
+    parameters:
+      - name: ref_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      tags: [Assets]
+      summary: Remove reference
+      responses:
+        "204":
+          description: Removed
+
+  /api/v1/tags:
+    get:
+      tags: [Tags]
+      summary: List tags
+      parameters:
+        - name: space_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Tags list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      tags: [Tags]
+      summary: Create tag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTagRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /api/v1/tags/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      tags: [Tags]
+      summary: Delete tag
+      responses:
+        "204":
+          description: Deleted
+
+  /api/v1/tags/asset:
+    post:
+      tags: [Tags]
+      summary: Tag an asset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagAssetRequest"
+      responses:
+        "200":
+          description: Tagged
+    delete:
+      tags: [Tags]
+      summary: Untag an asset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagAssetRequest"
+      responses:
+        "200":
+          description: Untagged
+
+  /api/v1/tags/asset/{asset_id}:
+    parameters:
+      - name: asset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Tags]
+      summary: List asset tags
+      responses:
+        "200":
+          description: Tags on asset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /api/v1/sessions:
+    get:
+      tags: [Sessions]
+      summary: List CLI sessions
+      responses:
+        "200":
+          description: Active sessions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      tags: [Sessions]
+      summary: Create CLI session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionRequest"
+      responses:
+        "201":
+          description: Session with token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /api/v1/sessions/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      tags: [Sessions]
+      summary: Revoke session
+      responses:
+        "200":
+          description: Revoked
+
+  /api/v1/storage/accounts:
+    get:
+      tags: [Storage]
+      summary: List storage accounts
+      responses:
+        "200":
+          description: Accounts list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      tags: [Storage]
+      summary: Create storage account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStorageAccountRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /api/v1/storage/accounts/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      tags: [Storage]
+      summary: Get storage account
+      responses:
+        "200":
+          description: Account details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    put:
+      tags: [Storage]
+      summary: Update storage account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStorageAccountRequest"
+      responses:
+        "200":
+          description: Updated
+
+  /api/v1/storage/accounts/{id}/deactivate:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    post:
+      tags: [Storage]
+      summary: Deactivate account
+      responses:
+        "200":
+          description: Deactivated
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    SuccessResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        data: {}
+
+    ErrorResponse:
+      type: object
+      required: [success, error]
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+
+    CreateSpaceRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        storage_quota_bytes:
+          type: integer
+          format: int64
+          default: 0
+
+    UpdateSpaceRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        storage_quota_bytes:
+          type: integer
+          format: int64
+
+    CreateFolderRequest:
+      type: object
+      required: [space_id, name]
+      properties:
+        space_id:
+          type: string
+          format: uuid
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+
+    RenameFolderRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+
+    MoveFolderRequest:
+      type: object
+      properties:
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    CreateReferenceRequest:
+      type: object
+      required: [asset_id, space_id]
+      properties:
+        asset_id:
+          type: string
+          format: uuid
+        space_id:
+          type: string
+          format: uuid
+        folder_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    CreateTagRequest:
+      type: object
+      required: [space_id, name]
+      properties:
+        space_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+
+    TagAssetRequest:
+      type: object
+      required: [space_id, asset_id, tag_id]
+      properties:
+        space_id:
+          type: string
+          format: uuid
+        asset_id:
+          type: string
+          format: uuid
+        tag_id:
+          type: integer
+          format: int64
+
+    CreateSessionRequest:
+      type: object
+      properties:
+        label:
+          type: string
+          maxLength: 255
+
+    CreateStorageAccountRequest:
+      type: object
+      required: [provider, label, layer, credentials]
+      properties:
+        provider:
+          type: string
+          enum: [cloudinary, imagekit, r2, gcs]
+        label:
+          type: string
+          minLength: 1
+          maxLength: 255
+        layer:
+          type: string
+          enum: [serving, archive]
+        credentials:
+          type: object
+          additionalProperties:
+            type: string
+        quota_bytes:
+          type: integer
+          format: int64
+          default: 0
+
+    UpdateStorageAccountRequest:
+      type: object
+      required: [label]
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 255
+        is_active:
+          type: boolean
+        quota_bytes:
+          type: integer
+          format: int64
+
+  responses:
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
