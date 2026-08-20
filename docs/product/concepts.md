@@ -4,122 +4,152 @@ The precise meaning of every core term in Filora. These terms are used
 consistently across product, architecture, database, and code. When in doubt,
 this page is the shared vocabulary.
 
+See also: [CONTEXT.md](../../CONTEXT.md) for the authoritative quick-reference.
+
 ---
 
-## People & access
+## People & Access
 
 **User**
-A person in the family. Identity (login, profile) is owned by [Clerk](https://clerk.com);
-Filora keeps a local mirror. See also [Auth](../architecture/auth.md).
+A person in the family. Identity (login, profile) is owned by Clerk; Filora
+keeps a local mirror row synced via webhook.
 
 **Superuser**
 The most privileged role — full, unrestricted access. Typically the family owner.
-Represented by the `superuser` role holding the wildcard permission.
+Holds the wildcard permission (`*:*`).
 
 **Role (global)**
-A named set of capabilities: `superuser`, `admin`, `member`, `viewer`. A user can
-hold several roles at once. See [roles.md](./roles.md).
+A named set of capabilities: `superuser`, `admin`, `member`, `viewer`. A user
+can hold multiple roles simultaneously.
 
 **Permission**
 A single capability expressed as `resource:action` (e.g. `asset:read`,
-`gallery:invite`), granted to a role with a **scope**.
+`space:invite`), granted to a role with a **scope**.
 
 **Scope**
 How far a permission reaches: `own` (only things the user owns/belongs to) or
 `all` (the whole family workspace).
 
-**Membership role (local)**
-Access to a *specific* gallery or album: `owner`, `editor`, or `viewer`. This is
-separate from global roles and governs day-to-day sharing.
-
-**Invitation**
-An offer (sent to an email address) to join a gallery or album at a given
-membership role. The invitee may not have an account yet; they accept via a link
-after signing in through Clerk.
+**Membership**
+Per-space access grant for an invited user. Roles: `owner` (creator, automatic),
+`editor`, or `viewer`. This is separate from global roles and governs day-to-day
+sharing.
 
 ---
 
 ## Organization
 
-**Gallery**
-The top-level space that holds assets. **Every user gets one default gallery**
-automatically. A user can own several galleries and can be a member of other
-people's galleries. Storage **quota is tracked per gallery**.
+**Space**
+The top-level container. **Every user gets one default space** on signup. A user
+can own multiple spaces. Sharing a space = inviting another user with a
+membership role. Quota is tracked per space.
 
-**Album**
-A grouping of assets **inside a gallery** (e.g. "Summer 2024"). An album has an
-owner who can invite other members. One asset can appear in **multiple albums**.
-
-**Tag**
-A short label used to filter, search, and organize assets. Tags are a shared
-vocabulary **scoped to a gallery**; an asset can have many tags.
+**Folder**
+Hierarchical file organization within a space. Supports unlimited nesting via
+`parent_id`. Assets do not need to be in a folder — root-level (space root) is
+allowed.
 
 **Asset**
-A logical file record — a photo, video, document, archive, or other file — plus
-its metadata (name, type, size, checksum, tags, etc.). The asset is the "truth";
-the actual bytes live in storage locations.
+A logical file record — any file type (image, video, document, archive, other) —
+plus its metadata (name, type, size, checksum, tags, etc.). Represents **one
+physical copy** of bytes. The asset record is the source of truth; actual bytes
+live in storage locations.
+
+**Asset Reference**
+The many-to-many link between an asset and a location (folder or space root).
+One asset can appear in multiple folders within the same space, and can be
+referenced from multiple spaces. No physical duplication occurs.
+
+**Tag**
+A short, flat string label for cross-cutting grouping. Scoped per space. An
+asset can have many tags. No parent-child hierarchy — users may use naming
+conventions (e.g. `event:birthday`) but the system treats them as opaque strings.
 
 **Trash (soft delete)**
-Deleting an asset moves it to trash (marks `deleted_at`) rather than destroying
-it, so accidental deletes can be recovered.
+Removing an asset reference from a folder/space marks it as removed from that
+location. The physical asset is destroyed only when **zero references remain**
+across all spaces and folders (plus a retention period).
 
 ---
 
 ## Storage
 
-**Storage provider / account**
-A concrete cloud account Filora uploads to (e.g. "ImageKit #1", "Cloudinary #2",
-"GCS Archive"). Accounts are **global** and managed by admins — not owned by
-end users. Many accounts can exist per layer to work around per-account limits.
+**Storage Provider**
+A type of cloud service: `cloudinary`, `imagekit`, `r2`, `gcs`. Defined as a
+port/interface in the codebase; implementations are pluggable adapters.
 
-**Layer**
-Filora stores every asset in two layers:
+**Storage Account**
+A concrete cloud account registered in Filora (e.g. "Cloudinary #3",
+"ImageKit #7", "GCS Archive #1"). Accounts are **global** and admin-managed —
+not owned by end users. Many accounts can exist per provider per layer to pool
+capacity past free-tier limits.
 
-- **Serving layer** — hot, fast, publicly viewable free-tier providers
-  (Cloudinary, ImageKit). This is what the app serves and displays.
-- **Archive layer** — cold, cheap, archive-class storage (Google Cloud Storage
-  Archive, Cloudflare R2, etc.). This is the safety copy.
+**Serving Layer (L1)**
+Hot, free-tier storage providers (Cloudinary, ImageKit). Files are served
+directly from here. Supports URL-based image transforms for previews. Accounts
+are disposable — if banned, mark inactive and continue with others.
 
-**Storage location**
-A physical copy of an asset in one provider account. An asset has at least one
-serving location and at least one archive location. Each location tracks its own
-status (`pending` → `stored` / `failed`).
+**Archive Layer (L2)**
+Cold, cheap backup storage (GCS Archive class as first implementation).
+Pluggable interface for alternative providers. Every asset gets an archive copy
+asynchronously after upload.
 
-**Account election** *(backlog)*
-The (not-yet-built) strategy that decides *which* account within a layer a new
-upload lands on (e.g. most free space, round-robin).
+**Storage Location**
+A record that an asset's bytes exist at a specific account and path. Each
+location tracks status (`pending` → `stored` / `failed`). An asset has ≥1
+serving location and (eventually) ≥1 archive location.
 
-**Archive sync job**
-A background task that replicates an asset to the archive layer with retries.
-Uploads reach the serving layer immediately; archiving happens asynchronously.
+**Account Election**
+The strategy that picks which storage account within a layer receives a new
+upload. Deferred for MVP (hardcode single account per layer). Future options:
+least-used, round-robin, provider-preference.
+
+**Archive Sync Job**
+A background task that replicates an asset from serving layer to archive layer.
+Runs asynchronously after upload, with retries on failure.
 
 **Quota**
-The storage limit, tracked **per gallery**. Physical capacity is spread across
-multiple accounts per layer, so a gallery's quota is independent of any single
-account's free-tier cap.
+Storage limit tracked **per space**. Physical capacity is spread across multiple
+accounts, so a space's quota is independent of any single account's free-tier
+cap.
 
 **Deduplication**
-Identical files (same SHA-256 hash) within a gallery are stored once. Dedup is
-scoped per gallery and ignores trashed assets.
+Identical files (same SHA-256 hash) are stored once. If a user uploads a file
+that already exists, the system creates a new reference to the existing asset
+rather than storing duplicate bytes.
 
 ---
 
-## Clients & access methods
+## Preview
 
-**Web app**
-The React front-end. Login and sessions handled by Clerk.
+**Image preview** — generated by the serving-layer provider (Cloudinary/ImageKit)
+via URL transforms. No server-side compute. Works only for image file types.
+
+**Non-image files** — displayed with a static icon based on MIME type. No
+thumbnail or preview generation.
+
+---
+
+## Clients & Access Methods
+
+**Web App**
+React front-end. Thin client over the API. Login and sessions handled by Clerk.
 
 **CLI (terminal)**
-A command-line client that talks to the API over HTTP. Supports logging in from
-a terminal and managing **multiple concurrent sessions** via opaque tokens.
+Go command-line client. Thin HTTP client, no business logic. Supports multiple
+concurrent sessions via opaque tokens.
 
 **API**
-The Go backend that holds all business logic. The web app and CLI are thin
-clients over it.
+Go backend (Fiber v3). All business logic lives here. The web app and CLI are
+thin clients over it.
 
 ---
 
 ## Data model note
 
-For exact tables, columns, and constraints behind these concepts, see the
-[Database schema reference](../database/schema.md) and [ERD](../database/erd.md).
+For exact tables, columns, and constraints, see the database schema reference.
+For architectural decisions behind these terms, see [docs/adr/](../adr/).
+
+---
+
+**Next:** [Features](./features.md) — What Filora does.

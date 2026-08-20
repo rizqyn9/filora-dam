@@ -1,37 +1,47 @@
 # Product Overview
 
-Filora is a multi-cloud Digital Asset Management (DAM) platform for a family.
+Filora is a private, archive-first Digital Asset Management platform for a family.
 
 ---
 
 ## What is Filora?
 
-People upload and organize their files — photos, videos, documents, archives, anything — in one place. Behind the scenes, Filora spreads those files across several cloud storage accounts and keeps a cheap archived copy. The user never has to think about any of that.
+People upload any file — photos, videos, documents, archives — into their own
+space. Behind the scenes, Filora stores each file once across a pool of free-tier
+cloud accounts and keeps a cheap archived copy on a separate layer. The user
+never has to think about any of that.
 
-> **The core promise:** you manage *your files*, not *storage*.
+> **The core promise:** your files are safe, organized, and always findable —
+> you never manage storage.
 
 Users never need to know:
 
 - where a file is physically stored,
-- which storage provider is used,
-- which account holds their file.
+- which storage provider holds it,
+- which account among dozens it landed on.
 
 Filora manages all of that automatically.
 
 ## The problem
 
-Free-tier cloud media services (Cloudinary, ImageKit, etc.) are generous but limited per account. A single family quickly outgrows one free account, and juggling multiple accounts by hand is painful:
+Free-tier cloud media services (Cloudinary, ImageKit, etc.) are generous but
+limited per account. A single family quickly outgrows one free account, and
+juggling multiple accounts by hand is painful:
 
 - Which account has space left?
 - Where did I upload that video?
 - How do I keep a safe backup without paying for premium tiers?
 - How do I share a set of files with a family member, but not everything?
 
-Filora solves this by treating many storage accounts as one transparent pool, adding a cheap archive layer for safety, and layering simple sharing and organization (spaces, folders, tags) on top.
+Filora solves this by pooling many storage accounts as one transparent layer,
+adding a cheap archive layer for safety, and layering simple organization
+(spaces, folders, tags) on top.
 
 ## Who it's for
 
-A single family (private, invite-only). Not a public SaaS. This shapes every decision: small user counts, simple security, low operational overhead, and a bias toward shipping working features fast.
+A single family (private, invite-only). Not a public SaaS. This shapes every
+decision: small user counts (3–5 people), simple security, low operational
+overhead, and a bias toward shipping working features fast.
 
 Typical people:
 
@@ -44,56 +54,73 @@ See [roles.md](./roles.md) for the full model.
 
 ## What you can do (at a glance)
 
-- Upload any file (photos, videos, documents, archives) into a **space**.
-- Organize files into **folders** (hierarchical, nested) and with **tags**.
-- **Share** a space with other family members by email invite.
-- Have every file automatically stored on a **serving** layer (fast, viewable) and copied to an **archive** layer (cheap, safe backup).
-- Browse media (photos/videos) in a grid view optimized for visual content.
-- Manage everything from the **web app** or the **terminal (CLI)** — with multiple logged-in terminal sessions at once.
+- Upload any file into your **space**.
+- Organize files into **folders** (hierarchical, nested) and with **tags** (flat labels).
+- Place one file in **multiple folders** (virtual reference, not a copy).
+- **Share** a space with family members by invite (editor or viewer access).
+- Have every file stored on a **serving layer** (fast, free-tier) and copied to an
+  **archive layer** (cheap, safe backup) asynchronously.
+- Browse images with provider-generated **previews**; non-image files show type icons.
+- Manage everything from the **web app** or the **CLI**.
 
 See [features.md](./features.md) for the full catalog.
 
 ## Domain model
 
 ```
-Space (top-level container, one default per user)
+Space (top-level container, ≥1 per user)
 ├── Folders (hierarchical, nested via parent_id)
-│   ├── Files (assets with folder_id set)
-│   └── Sub-folders
-├── Root files (assets with folder_id = NULL)
-└── Tags (cross-cutting virtual grouping)
+│   └── Asset References (many-to-many; same asset in multiple folders)
+├── Root assets (references with no folder)
+└── Tags (flat labels, scoped per space)
+
+Asset (single physical copy)
+├── Storage Location: Serving Layer (L1)
+└── Storage Location: Archive Layer (L2)
 ```
 
-- **Space** — a workspace that groups files, folders, members, and storage quota together. Each user gets a default space on signup.
-- **Folder** — hierarchical file organization within a space. Supports unlimited nesting.
-- **Asset** — any uploaded file (image, video, document, archive, or generic file). Lives in one space, optionally in one folder.
-- **Tag** — a label for cross-cutting grouping. A file can have many tags. Tags are scoped per space.
+- **Space** — a workspace that groups assets, folders, members, and quota.
+  Each user gets a default space on signup. A user can own multiple spaces.
+- **Folder** — hierarchical organization within a space. Unlimited nesting.
+- **Asset** — a logical file record plus metadata. One physical copy, shared by
+  reference across spaces and folders.
+- **Asset Reference** — the link between an asset and a folder/space. Many-to-many.
+- **Tag** — a flat label for cross-cutting grouping, scoped per space.
+
+See [concepts.md](./concepts.md) for the full glossary.
 
 ## Value proposition
 
 | For the user | How Filora delivers it |
 |--------------|------------------------|
-| "Never run out of space" | Pools multiple free-tier accounts as one; adds accounts as needed |
-| "Never lose a file" | Every asset is copied to a cheap archive layer |
+| "Never lose a file" | Every asset is archived to a cheap backup layer automatically |
+| "Never run out of space" | Pools many free-tier accounts; single-copy storage maximizes capacity |
 | "Find things fast" | Spaces, folders, tags, search, type filters |
 | "Share selectively" | Per-space membership (owner/editor/viewer) |
 | "Don't make me think about storage" | Provider/account selection is fully automatic and hidden |
 
 ## Product principles
 
-1. **Hide the storage complexity.** The user's mental model is spaces, folders, and files — never providers or accounts.
-2. **Metadata is the truth.** Our database is authoritative; cloud providers are just where bytes happen to live.
-3. **Safe by default.** Everything gets an archive copy; deletes go to a trash first.
-4. **Simple, not enterprise.** Family-scale means we favor the simplest thing that works over elaborate machinery.
-5. **Build first, refine later.** Ship working features; add abstractions only when a second real case appears.
+1. **Archive-first.** Data safety is the core value. Every asset reaches both
+   layers. Organization is the UX that makes the archive usable.
+2. **Hide the storage complexity.** The user's mental model is spaces, folders,
+   and files — never providers or accounts.
+3. **Metadata is the truth.** PostgreSQL is authoritative; cloud providers are
+   just where bytes happen to live.
+4. **Safe by default.** Soft deletes, trash retention, archive redundancy.
+5. **Simple, not enterprise.** Family-scale means the simplest thing that works.
+6. **Build first, refine later.** Ship working features; add abstractions only
+   when a second real case appears.
 
 ## Non-goals (for now)
 
 - Public sign-up / multi-tenant SaaS.
 - Complex enterprise security and compliance.
 - Real-time collaboration / editing.
-- Microservices, event sourcing, CQRS, and similar heavy architecture.
-- Album/collection features (can be added later if needed).
+- Mobile app or auto-sync from devices.
+- AI-powered tagging, smart albums, face detection.
+- Video/PDF preview generation (server-side compute).
+- Microservices, event sourcing, CQRS.
 
 ---
 
