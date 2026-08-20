@@ -6,16 +6,18 @@ import (
 )
 
 type Config struct {
-	Port        string
-	DatabaseURL string
-	Environment string
+	Port          string
+	DatabaseURL   string
+	Environment   string
+	EncryptionKey string // hex-encoded 32-byte AES key
 }
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		Port:        envOrDefault("PORT", "8080"),
-		DatabaseURL: os.Getenv("DATABASE_URL"),
-		Environment: envOrDefault("ENVIRONMENT", "development"),
+		Port:          envOrDefault("PORT", "8080"),
+		DatabaseURL:   os.Getenv("DATABASE_URL"),
+		Environment:   envOrDefault("ENVIRONMENT", "development"),
+		EncryptionKey: os.Getenv("ENCRYPTION_KEY"),
 	}
 
 	if cfg.DatabaseURL == "" {

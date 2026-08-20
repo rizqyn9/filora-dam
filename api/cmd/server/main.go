@@ -10,9 +10,12 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog"
 
+	"github.com/rizqyn9/filora-dam/api/internal/auth"
 	"github.com/rizqyn9/filora-dam/api/internal/config"
 	"github.com/rizqyn9/filora-dam/api/internal/database"
 	"github.com/rizqyn9/filora-dam/api/internal/database/db"
+	"github.com/rizqyn9/filora-dam/api/internal/lib"
+	"github.com/rizqyn9/filora-dam/api/internal/modules/account"
 	"github.com/rizqyn9/filora-dam/api/internal/modules/asset"
 	"github.com/rizqyn9/filora-dam/api/internal/modules/folder"
 	"github.com/rizqyn9/filora-dam/api/internal/modules/session"
@@ -41,7 +44,21 @@ func main() {
 
 	queries := db.New(pool)
 
+	// --- Encryption ---
+	encryptFn := func(plaintext []byte) ([]byte, error) {
+		if cfg.EncryptionKey == "" {
+			// Development fallback: no encryption
+			return plaintext, nil
+		}
+		return lib.Encrypt(plaintext, cfg.EncryptionKey)
+	}
+
 	// --- Compose modules ---
+
+	// Account (Clerk user sync + auth resolver)
+	accountRepo := account.NewRepository(queries)
+	accountService := account.NewService(accountRepo)
+	accountWebhook := account.NewWebhookHandler(accountService)
 
 	// Spaces
 	spaceRepo := space.NewRepository(queries)
@@ -65,32 +82,35 @@ func main() {
 
 	// Storage
 	storageRepo := storage.NewRepository(queries)
-	storageService := storage.NewService(storageRepo, encryptCredentials)
+	storageService := storage.NewService(storageRepo, encryptFn)
 	storageHandler := storage.NewHandler(storageService)
 
-	// Archive worker (also implements JobCreator interface)
+	// Archive worker (also implements JobCreator)
 	archiveWorker := storage.NewWorker(queries, storageRepo, logger)
 
 	// Assets
 	assetRepo := asset.NewRepository(queries)
-	assetService := asset.NewService(assetRepo, storageService, nil, archiveWorker) // uploader=nil until adapter wired
+	assetService := asset.NewService(assetRepo, storageService, nil, archiveWorker)
 	assetHandler := asset.NewHandler(assetService)
 
 	// --- Server ---
 	srv := server.New(logger)
 
-	api := srv.App.Group("/api/v1")
+	// Public routes (no auth)
+	srv.App.Get("/health", func(c fiber.Ctx) error {
+		return c.SendString("ok")
+	})
+	account.RegisterRoutes(srv.App, accountWebhook)
+
+	// Protected routes (auth required)
+	api := srv.App.Group("/api/v1", auth.Middleware(accountService))
+
 	space.RegisterRoutes(api, spaceHandler)
 	folder.RegisterRoutes(api, folderHandler)
 	tag.RegisterRoutes(api, tagHandler)
 	session.RegisterRoutes(api, sessionHandler)
 	storage.RegisterRoutes(api, storageHandler)
 	asset.RegisterRoutes(api, assetHandler)
-
-	// Health check
-	srv.App.Get("/health", func(c fiber.Ctx) error {
-		return c.SendString("ok")
-	})
 
 	// --- Graceful shutdown ---
 	go func() {
@@ -107,10 +127,4 @@ func main() {
 	if err := srv.App.Listen(addr); err != nil {
 		logger.Fatal().Err(err).Msg("server failed")
 	}
-}
-
-// ponytail: placeholder encryption. Upgrade path: AES-GCM with key from env/vault.
-func encryptCredentials(plaintext []byte) ([]byte, error) {
-	// TODO: implement real encryption with ENCRYPTION_KEY from env
-	return plaintext, nil
 }
