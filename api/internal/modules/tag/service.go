@@ -2,6 +2,7 @@ package tag
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/rizqyn9/filora-dam/api/internal/database/db"
@@ -27,7 +28,15 @@ func (s *Service) DeleteTag(ctx context.Context, id int64) error {
 	return s.repo.Delete(ctx, id)
 }
 
-func (s *Service) TagAsset(ctx context.Context, assetID uuid.UUID, tagID int64) error {
+// TagAsset validates the tag belongs to the given space before linking.
+func (s *Service) TagAsset(ctx context.Context, spaceID uuid.UUID, assetID uuid.UUID, tagID int64) error {
+	tag, err := s.repo.GetByID(ctx, tagID)
+	if err != nil {
+		return fmt.Errorf("tag not found: %w", err)
+	}
+	if tag.SpaceID != spaceID {
+		return fmt.Errorf("tag %d does not belong to space %s", tagID, spaceID)
+	}
 	return s.repo.AddAssetTag(ctx, assetID, tagID)
 }
 

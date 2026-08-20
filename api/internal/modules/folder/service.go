@@ -45,7 +45,20 @@ func (s *Service) RenameFolder(ctx context.Context, id uuid.UUID, name string) e
 }
 
 func (s *Service) MoveFolder(ctx context.Context, id uuid.UUID, parentID *uuid.UUID) error {
-	// TODO: validate no circular reference (folder cannot be its own ancestor)
+	if parentID != nil {
+		// Validate: target parent must not be the folder itself or one of its descendants
+		if *parentID == id {
+			return fmt.Errorf("cannot move folder into itself")
+		}
+		ancestors, err := s.repo.GetAncestors(ctx, *parentID)
+		if err == nil {
+			for _, a := range ancestors {
+				if a.ID == id {
+					return fmt.Errorf("cannot move folder into its own descendant")
+				}
+			}
+		}
+	}
 	return s.repo.Move(ctx, id, parentID)
 }
 

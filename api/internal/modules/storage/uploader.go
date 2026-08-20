@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/google/uuid"
 	"github.com/rizqyn9/filora-dam/api/internal/database/db"
 )
 
@@ -42,7 +43,7 @@ func (u *Uploader) Upload(ctx context.Context, accountID int64, key string, body
 }
 
 // UploadAndRecord uploads a file and creates a storage_locations record.
-func (u *Uploader) UploadAndRecord(ctx context.Context, assetID [16]byte, accountID int64, layer db.StorageLayer, key string, body io.Reader, size int64, contentType string) (*db.StorageLocation, error) {
+func (u *Uploader) UploadAndRecord(ctx context.Context, assetID uuid.UUID, accountID int64, layer db.StorageLayer, key string, body io.Reader, size int64, contentType string) (*db.StorageLocation, error) {
 	remotePath, remoteURL, err := u.Upload(ctx, accountID, key, body, size, contentType)
 	if err != nil {
 		// Record failure

@@ -8,6 +8,7 @@ type CreateTagRequest struct {
 }
 
 type TagAssetRequest struct {
+	SpaceID uuid.UUID `json:"space_id" validate:"required"`
 	AssetID uuid.UUID `json:"asset_id" validate:"required"`
 	TagID   int64     `json:"tag_id" validate:"required"`
 }

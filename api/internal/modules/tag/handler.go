@@ -69,7 +69,7 @@ func (h *Handler) TagAsset(c fiber.Ctx) error {
 		return lib.JSONError(c, fiber.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 	}
 
-	if err := h.service.TagAsset(c.Context(), req.AssetID, req.TagID); err != nil {
+	if err := h.service.TagAsset(c.Context(), req.SpaceID, req.AssetID, req.TagID); err != nil {
 		return lib.JSONError(c, fiber.StatusInternalServerError, "INTERNAL_ERROR", "failed to tag asset")
 	}
 

@@ -47,6 +47,10 @@ func (s *Service) CreateAccount(ctx context.Context, req CreateAccountRequest) (
 }
 
 func (s *Service) UpdateAccount(ctx context.Context, id int64, req UpdateAccountRequest) error {
+	// Validate account exists before update
+	if _, err := s.repo.GetByID(ctx, id); err != nil {
+		return fmt.Errorf("account not found: %w", err)
+	}
 	return s.repo.Update(ctx, db.UpdateStorageAccountParams{
 		ID:         id,
 		Label:      req.Label,
@@ -56,6 +60,13 @@ func (s *Service) UpdateAccount(ctx context.Context, id int64, req UpdateAccount
 }
 
 func (s *Service) DeactivateAccount(ctx context.Context, id int64) error {
+	account, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("account not found: %w", err)
+	}
+	if !account.IsActive {
+		return nil // already inactive, idempotent
+	}
 	return s.repo.Deactivate(ctx, id)
 }
 

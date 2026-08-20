@@ -98,8 +98,8 @@ func main() {
 
 	// Assets
 	assetRepo := asset.NewRepository(queries)
-	assetService := asset.NewService(assetRepo, storageService, storageUploader, archiveWorker)
-	assetHandler := asset.NewHandler(assetService)
+	assetService := asset.NewService(assetRepo, storageService, storageUploader, archiveWorker, spaceService)
+	assetHandler := asset.NewHandler(assetService, spaceService, logger)
 
 	// --- Server ---
 	srv := server.New(logger)

@@ -1,12 +1,19 @@
 package asset
 
-import "github.com/google/uuid"
+import (
+	"io"
 
-type UploadRequest struct {
-	SpaceID  uuid.UUID  `json:"space_id" validate:"required"`
-	FolderID *uuid.UUID `json:"folder_id"` // nullable = space root
-	Name     string     `json:"name" validate:"required,min=1,max=255"`
-	// File content comes from multipart form, not JSON body.
+	"github.com/google/uuid"
+)
+
+// UploadInput groups all parameters for the upload flow.
+type UploadInput struct {
+	SpaceID     uuid.UUID
+	FolderID    *uuid.UUID
+	Filename    string
+	ContentType string
+	Size        int64
+	Body        io.Reader
 }
 
 type CreateReferenceRequest struct {

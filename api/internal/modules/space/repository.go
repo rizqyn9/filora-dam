@@ -62,3 +62,19 @@ func (r *Repository) Delete(ctx context.Context, id uuid.UUID) error {
 	}
 	return nil
 }
+
+func (r *Repository) IncrementUsage(ctx context.Context, id uuid.UUID, bytes int64) error {
+	return r.q.IncrementSpaceUsage(ctx, db.IncrementSpaceUsageParams{ID: id, StorageUsedBytes: bytes})
+}
+
+func (r *Repository) DecrementUsage(ctx context.Context, id uuid.UUID, bytes int64) error {
+	return r.q.DecrementSpaceUsage(ctx, db.DecrementSpaceUsageParams{ID: id, StorageUsedBytes: bytes})
+}
+
+func (r *Repository) GetMember(ctx context.Context, spaceID uuid.UUID, userID int64) (*db.SpaceMember, error) {
+	m, err := r.q.GetSpaceMember(ctx, db.GetSpaceMemberParams{SpaceID: spaceID, UserID: userID})
+	if err != nil {
+		return nil, fmt.Errorf("get space member: %w", err)
+	}
+	return &m, nil
+}

@@ -74,3 +74,41 @@ func (s *Service) UpdateSpace(ctx context.Context, id uuid.UUID, req UpdateSpace
 func (s *Service) DeleteSpace(ctx context.Context, id uuid.UUID) error {
 	return s.repo.Delete(ctx, id)
 }
+
+// CheckQuota implements asset.SpaceQuota.
+func (s *Service) CheckQuota(ctx context.Context, spaceID uuid.UUID, additionalBytes int64) error {
+	sp, err := s.repo.GetByID(ctx, spaceID)
+	if err != nil {
+		return fmt.Errorf("get space for quota check: %w", err)
+	}
+	if sp.StorageQuotaBytes > 0 && sp.StorageUsedBytes+additionalBytes > sp.StorageQuotaBytes {
+		return fmt.Errorf("space %s quota exceeded (%d/%d bytes)", spaceID, sp.StorageUsedBytes+additionalBytes, sp.StorageQuotaBytes)
+	}
+	return nil
+}
+
+// IncrementUsage implements asset.SpaceQuota.
+func (s *Service) IncrementUsage(ctx context.Context, spaceID uuid.UUID, bytes int64) error {
+	return s.repo.IncrementUsage(ctx, spaceID, bytes)
+}
+
+// DecrementUsage implements asset.SpaceQuota.
+func (s *Service) DecrementUsage(ctx context.Context, spaceID uuid.UUID, bytes int64) error {
+	return s.repo.DecrementUsage(ctx, spaceID, bytes)
+}
+
+// HasMember checks if a user has access to a space (owner or member).
+func (s *Service) HasMember(ctx context.Context, spaceID uuid.UUID, userID int64) (bool, error) {
+	sp, err := s.repo.GetByID(ctx, spaceID)
+	if err != nil {
+		return false, err
+	}
+	if sp.OwnerID == userID {
+		return true, nil
+	}
+	_, err = s.repo.GetMember(ctx, spaceID, userID)
+	if err != nil {
+		return false, nil
+	}
+	return true, nil
+}
