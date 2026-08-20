@@ -13,8 +13,12 @@ import (
 	"github.com/rizqyn9/filora-dam/api/internal/config"
 	"github.com/rizqyn9/filora-dam/api/internal/database"
 	"github.com/rizqyn9/filora-dam/api/internal/database/db"
+	"github.com/rizqyn9/filora-dam/api/internal/modules/asset"
 	"github.com/rizqyn9/filora-dam/api/internal/modules/folder"
+	"github.com/rizqyn9/filora-dam/api/internal/modules/session"
 	"github.com/rizqyn9/filora-dam/api/internal/modules/space"
+	"github.com/rizqyn9/filora-dam/api/internal/modules/storage"
+	"github.com/rizqyn9/filora-dam/api/internal/modules/tag"
 	"github.com/rizqyn9/filora-dam/api/internal/server"
 )
 
@@ -38,13 +42,39 @@ func main() {
 	queries := db.New(pool)
 
 	// --- Compose modules ---
+
+	// Spaces
 	spaceRepo := space.NewRepository(queries)
 	spaceService := space.NewService(spaceRepo)
 	spaceHandler := space.NewHandler(spaceService)
 
+	// Folders
 	folderRepo := folder.NewRepository(queries)
 	folderService := folder.NewService(folderRepo)
 	folderHandler := folder.NewHandler(folderService)
+
+	// Tags
+	tagRepo := tag.NewRepository(queries)
+	tagService := tag.NewService(tagRepo)
+	tagHandler := tag.NewHandler(tagService)
+
+	// Sessions
+	sessionRepo := session.NewRepository(queries)
+	sessionService := session.NewService(sessionRepo)
+	sessionHandler := session.NewHandler(sessionService)
+
+	// Storage
+	storageRepo := storage.NewRepository(queries)
+	storageService := storage.NewService(storageRepo, encryptCredentials)
+	storageHandler := storage.NewHandler(storageService)
+
+	// Archive worker (also implements JobCreator interface)
+	archiveWorker := storage.NewWorker(queries, storageRepo, logger)
+
+	// Assets
+	assetRepo := asset.NewRepository(queries)
+	assetService := asset.NewService(assetRepo, storageService, nil, archiveWorker) // uploader=nil until adapter wired
+	assetHandler := asset.NewHandler(assetService)
 
 	// --- Server ---
 	srv := server.New(logger)
@@ -52,6 +82,10 @@ func main() {
 	api := srv.App.Group("/api/v1")
 	space.RegisterRoutes(api, spaceHandler)
 	folder.RegisterRoutes(api, folderHandler)
+	tag.RegisterRoutes(api, tagHandler)
+	session.RegisterRoutes(api, sessionHandler)
+	storage.RegisterRoutes(api, storageHandler)
+	asset.RegisterRoutes(api, assetHandler)
 
 	// Health check
 	srv.App.Get("/health", func(c fiber.Ctx) error {
@@ -73,4 +107,10 @@ func main() {
 	if err := srv.App.Listen(addr); err != nil {
 		logger.Fatal().Err(err).Msg("server failed")
 	}
+}
+
+// ponytail: placeholder encryption. Upgrade path: AES-GCM with key from env/vault.
+func encryptCredentials(plaintext []byte) ([]byte, error) {
+	// TODO: implement real encryption with ENCRYPTION_KEY from env
+	return plaintext, nil
 }
