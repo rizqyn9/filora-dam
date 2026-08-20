@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
 
 	"github.com/rizqyn9/filora-dam/api/internal/config"
@@ -18,6 +19,8 @@ import (
 
 func main() {
 	logger := zerolog.New(os.Stdout).With().Timestamp().Str("app", "worker").Logger()
+
+	_ = godotenv.Load()
 
 	cfg, err := config.Load()
 	if err != nil {

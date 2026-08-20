@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
 
 	"github.com/rizqyn9/filora-dam/api/internal/auth"
@@ -26,8 +27,15 @@ import (
 	"github.com/rizqyn9/filora-dam/api/internal/server"
 )
 
+func loadDotenv() error {
+	return godotenv.Load()
+}
+
 func main() {
 	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
+
+	// Load .env in development (silently ignored if file doesn't exist)
+	_ = loadDotenv()
 
 	cfg, err := config.Load()
 	if err != nil {
