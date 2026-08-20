@@ -1,7 +1,11 @@
 -- name: CreateInvitation :one
-INSERT INTO invitations (space_id, email, role, invited_by, expires_at)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO invitations (space_id, email, role, token_hash, invited_by, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
+
+-- name: GetInvitationByTokenHash :one
+SELECT * FROM invitations
+WHERE token_hash = $1 AND status = 'pending' AND expires_at > now();
 
 -- name: GetInvitationByID :one
 SELECT * FROM invitations WHERE id = $1;
@@ -9,11 +13,6 @@ SELECT * FROM invitations WHERE id = $1;
 -- name: ListPendingInvitationsBySpace :many
 SELECT * FROM invitations
 WHERE space_id = $1 AND status = 'pending'
-ORDER BY created_at DESC;
-
--- name: ListPendingInvitationsByEmail :many
-SELECT * FROM invitations
-WHERE email = $1 AND status = 'pending'
 ORDER BY created_at DESC;
 
 -- name: AcceptInvitation :exec

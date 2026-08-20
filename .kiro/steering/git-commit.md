@@ -40,7 +40,7 @@ Scope reflects the area of code changed. Use the most specific applicable scope.
 | `cli` | `cli/` — CLI client code |
 | `web` | `web/` — React frontend |
 | `db` | Database migrations, sqlc queries, schema changes |
-| `auth` | Authentication/authorization (Clerk integration, RBAC) |
+| `auth` | Authentication/authorization (opaque tokens, RBAC) |
 | `storage` | Storage adapters (Cloudinary, ImageKit, R2) |
 | `assets` | Asset module (upload, dedup, trash, download) |
 | `spaces` | Space module (members, invitations) |

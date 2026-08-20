@@ -12,30 +12,24 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
 
-	"github.com/rizqyn9/filora-dam/api/internal/auth"
+	iauth "github.com/rizqyn9/filora-dam/api/internal/auth"
 	"github.com/rizqyn9/filora-dam/api/internal/config"
 	"github.com/rizqyn9/filora-dam/api/internal/database"
 	"github.com/rizqyn9/filora-dam/api/internal/database/db"
 	"github.com/rizqyn9/filora-dam/api/internal/lib"
-	"github.com/rizqyn9/filora-dam/api/internal/modules/account"
 	"github.com/rizqyn9/filora-dam/api/internal/modules/asset"
+	authmod "github.com/rizqyn9/filora-dam/api/internal/modules/auth"
 	"github.com/rizqyn9/filora-dam/api/internal/modules/folder"
-	"github.com/rizqyn9/filora-dam/api/internal/modules/session"
 	"github.com/rizqyn9/filora-dam/api/internal/modules/space"
 	"github.com/rizqyn9/filora-dam/api/internal/modules/storage"
 	"github.com/rizqyn9/filora-dam/api/internal/modules/tag"
 	"github.com/rizqyn9/filora-dam/api/internal/server"
 )
 
-func loadDotenv() error {
-	return godotenv.Load()
-}
-
 func main() {
 	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
 
-	// Load .env in development (silently ignored if file doesn't exist)
-	_ = loadDotenv()
+	_ = godotenv.Load()
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -67,44 +61,32 @@ func main() {
 		return lib.Decrypt(ciphertext, cfg.EncryptionKey)
 	}
 
-	// --- Compose modules ---
+	// --- Auth ---
+	tokenCache := iauth.NewTokenCache()
+	authService := authmod.NewService(queries, tokenCache)
+	authHandler := authmod.NewHandler(authService)
 
-	// Account
-	accountRepo := account.NewRepository(queries)
-	accountService := account.NewService(accountRepo)
-	accountWebhook := account.NewWebhookHandler(accountService, cfg.ClerkWebhookSecret)
-
-	// Spaces
+	// --- Modules ---
 	spaceRepo := space.NewRepository(queries)
 	spaceService := space.NewService(spaceRepo)
 	spaceHandler := space.NewHandler(spaceService)
 
-	// Folders
 	folderRepo := folder.NewRepository(queries)
 	folderService := folder.NewService(folderRepo)
 	folderHandler := folder.NewHandler(folderService)
 
-	// Tags
 	tagRepo := tag.NewRepository(queries)
 	tagService := tag.NewService(tagRepo)
 	tagHandler := tag.NewHandler(tagService)
 
-	// Sessions
-	sessionRepo := session.NewRepository(queries)
-	sessionService := session.NewService(sessionRepo)
-	sessionHandler := session.NewHandler(sessionService)
-
-	// Storage
 	storageRepo := storage.NewRepository(queries)
 	storageService := storage.NewService(storageRepo, encryptFn)
 	storageHandler := storage.NewHandler(storageService)
 	storageRegistry := storage.NewRegistry(storageRepo, decryptFn)
 	storageUploader := storage.NewUploader(storageRegistry, storageRepo)
 
-	// Archive worker
 	archiveWorker := storage.NewWorker(queries, storageRepo, storageService, storageRegistry, logger)
 
-	// Assets
 	assetRepo := asset.NewRepository(queries)
 	assetService := asset.NewService(assetRepo, storageService, storageUploader, archiveWorker, spaceService)
 	assetHandler := asset.NewHandler(assetService, spaceService, logger)
@@ -112,22 +94,24 @@ func main() {
 	// --- Server ---
 	srv := server.New(logger)
 
-	// Public routes
+	// Public routes (no auth)
 	srv.App.Get("/health", func(c fiber.Ctx) error {
 		return c.SendString("ok")
 	})
-	account.RegisterRoutes(srv.App, accountWebhook)
+	authmod.RegisterRoutes(srv.App, authHandler)
 
 	// Protected routes
-	api := srv.App.Group("/api/v1", auth.Middleware(accountService))
+	authMiddleware := iauth.Middleware(tokenCache, authService, authmod.IdleTTL)
+	api := srv.App.Group("/api/v1", authMiddleware)
+
+	authmod.RegisterProtectedRoutes(api, authHandler)
 	space.RegisterRoutes(api, spaceHandler)
 	folder.RegisterRoutes(api, folderHandler)
 	tag.RegisterRoutes(api, tagHandler)
-	session.RegisterRoutes(api, sessionHandler)
 	storage.RegisterRoutes(api, storageHandler)
 	asset.RegisterRoutes(api, assetHandler)
 
-	// --- Archive worker (background) ---
+	// --- Archive worker ---
 	go archiveWorker.Run(ctx, 10*time.Second)
 
 	// --- Graceful shutdown ---

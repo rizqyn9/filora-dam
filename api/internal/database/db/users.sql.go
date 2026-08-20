@@ -26,30 +26,24 @@ func (q *Queries) AssignRole(ctx context.Context, arg AssignRoleParams) error {
 }
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (clerk_id, email, name, avatar_url)
-VALUES ($1, $2, $3, $4)
-RETURNING id, clerk_id, email, name, avatar_url, created_at, updated_at
+INSERT INTO users (email, password_hash, name)
+VALUES ($1, $2, $3)
+RETURNING id, email, password_hash, name, avatar_url, created_at, updated_at
 `
 
 type CreateUserParams struct {
-	ClerkID   string  `json:"clerk_id"`
-	Email     string  `json:"email"`
-	Name      string  `json:"name"`
-	AvatarUrl *string `json:"avatar_url"`
+	Email        string `json:"email"`
+	PasswordHash string `json:"password_hash"`
+	Name         string `json:"name"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, createUser,
-		arg.ClerkID,
-		arg.Email,
-		arg.Name,
-		arg.AvatarUrl,
-	)
+	row := q.db.QueryRow(ctx, createUser, arg.Email, arg.PasswordHash, arg.Name)
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.ClerkID,
 		&i.Email,
+		&i.PasswordHash,
 		&i.Name,
 		&i.AvatarUrl,
 		&i.CreatedAt,
@@ -58,36 +52,17 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
-const deleteUserByClerkID = `-- name: DeleteUserByClerkID :exec
-DELETE FROM users WHERE clerk_id = $1
+const deleteUser = `-- name: DeleteUser :exec
+DELETE FROM users WHERE id = $1
 `
 
-func (q *Queries) DeleteUserByClerkID(ctx context.Context, clerkID string) error {
-	_, err := q.db.Exec(ctx, deleteUserByClerkID, clerkID)
+func (q *Queries) DeleteUser(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, deleteUser, id)
 	return err
 }
 
-const getUserByClerkID = `-- name: GetUserByClerkID :one
-SELECT id, clerk_id, email, name, avatar_url, created_at, updated_at FROM users WHERE clerk_id = $1
-`
-
-func (q *Queries) GetUserByClerkID(ctx context.Context, clerkID string) (User, error) {
-	row := q.db.QueryRow(ctx, getUserByClerkID, clerkID)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.ClerkID,
-		&i.Email,
-		&i.Name,
-		&i.AvatarUrl,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, clerk_id, email, name, avatar_url, created_at, updated_at FROM users WHERE email = $1
+SELECT id, email, password_hash, name, avatar_url, created_at, updated_at FROM users WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -95,8 +70,8 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.ClerkID,
 		&i.Email,
+		&i.PasswordHash,
 		&i.Name,
 		&i.AvatarUrl,
 		&i.CreatedAt,
@@ -106,7 +81,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, clerk_id, email, name, avatar_url, created_at, updated_at FROM users WHERE id = $1
+SELECT id, email, password_hash, name, avatar_url, created_at, updated_at FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
@@ -114,8 +89,8 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.ClerkID,
 		&i.Email,
+		&i.PasswordHash,
 		&i.Name,
 		&i.AvatarUrl,
 		&i.CreatedAt,
@@ -162,32 +137,42 @@ func (q *Queries) RevokeRole(ctx context.Context, arg RevokeRoleParams) error {
 	return err
 }
 
+const updatePassword = `-- name: UpdatePassword :exec
+UPDATE users
+SET password_hash = $2, updated_at = now()
+WHERE id = $1
+`
+
+type UpdatePasswordParams struct {
+	ID           int64  `json:"id"`
+	PasswordHash string `json:"password_hash"`
+}
+
+func (q *Queries) UpdatePassword(ctx context.Context, arg UpdatePasswordParams) error {
+	_, err := q.db.Exec(ctx, updatePassword, arg.ID, arg.PasswordHash)
+	return err
+}
+
 const updateUser = `-- name: UpdateUser :one
 UPDATE users
-SET email = $2, name = $3, avatar_url = $4, updated_at = now()
-WHERE clerk_id = $1
-RETURNING id, clerk_id, email, name, avatar_url, created_at, updated_at
+SET name = $2, avatar_url = $3, updated_at = now()
+WHERE id = $1
+RETURNING id, email, password_hash, name, avatar_url, created_at, updated_at
 `
 
 type UpdateUserParams struct {
-	ClerkID   string  `json:"clerk_id"`
-	Email     string  `json:"email"`
+	ID        int64   `json:"id"`
 	Name      string  `json:"name"`
 	AvatarUrl *string `json:"avatar_url"`
 }
 
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, updateUser,
-		arg.ClerkID,
-		arg.Email,
-		arg.Name,
-		arg.AvatarUrl,
-	)
+	row := q.db.QueryRow(ctx, updateUser, arg.ID, arg.Name, arg.AvatarUrl)
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.ClerkID,
 		&i.Email,
+		&i.PasswordHash,
 		&i.Name,
 		&i.AvatarUrl,
 		&i.CreatedAt,

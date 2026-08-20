@@ -10,10 +10,10 @@ type contextKey string
 
 const userKey contextKey = "auth_user"
 
-// AuthUser represents the authenticated user extracted from the JWT.
+// AuthUser represents the authenticated user.
 type AuthUser struct {
-	ClerkID string
-	UserID  int64 // local DB user ID, resolved after JWT verification
+	UserID    int64
+	SessionID int64
 }
 
 // SetUser stores the authenticated user in the request context.
@@ -23,7 +23,6 @@ func SetUser(c fiber.Ctx, user *AuthUser) {
 }
 
 // GetUser retrieves the authenticated user from the request context.
-// Returns nil if no user is set (should not happen behind auth middleware).
 func GetUser(c fiber.Ctx) *AuthUser {
 	u, _ := c.Context().Value(userKey).(*AuthUser)
 	return u

@@ -1,25 +1,27 @@
 -- name: GetUserByID :one
 SELECT * FROM users WHERE id = $1;
 
--- name: GetUserByClerkID :one
-SELECT * FROM users WHERE clerk_id = $1;
-
 -- name: GetUserByEmail :one
 SELECT * FROM users WHERE email = $1;
 
 -- name: CreateUser :one
-INSERT INTO users (clerk_id, email, name, avatar_url)
-VALUES ($1, $2, $3, $4)
+INSERT INTO users (email, password_hash, name)
+VALUES ($1, $2, $3)
 RETURNING *;
 
 -- name: UpdateUser :one
 UPDATE users
-SET email = $2, name = $3, avatar_url = $4, updated_at = now()
-WHERE clerk_id = $1
+SET name = $2, avatar_url = $3, updated_at = now()
+WHERE id = $1
 RETURNING *;
 
--- name: DeleteUserByClerkID :exec
-DELETE FROM users WHERE clerk_id = $1;
+-- name: UpdatePassword :exec
+UPDATE users
+SET password_hash = $2, updated_at = now()
+WHERE id = $1;
+
+-- name: DeleteUser :exec
+DELETE FROM users WHERE id = $1;
 
 -- name: ListUserRoles :many
 SELECT role_name FROM user_roles WHERE user_id = $1;

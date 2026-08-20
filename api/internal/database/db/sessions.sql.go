@@ -10,31 +10,34 @@ import (
 	"time"
 )
 
-const createCLISession = `-- name: CreateCLISession :one
-INSERT INTO cli_sessions (user_id, token_hash, label, expires_at)
-VALUES ($1, $2, $3, $4)
-RETURNING id, user_id, token_hash, label, last_used_at, expires_at, revoked_at, created_at
+const createSession = `-- name: CreateSession :one
+INSERT INTO sessions (user_id, token_hash, client, label, expires_at)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, user_id, token_hash, client, label, last_used_at, expires_at, revoked_at, created_at
 `
 
-type CreateCLISessionParams struct {
-	UserID    int64     `json:"user_id"`
-	TokenHash string    `json:"token_hash"`
-	Label     string    `json:"label"`
-	ExpiresAt time.Time `json:"expires_at"`
+type CreateSessionParams struct {
+	UserID    int64      `json:"user_id"`
+	TokenHash string     `json:"token_hash"`
+	Client    ClientType `json:"client"`
+	Label     string     `json:"label"`
+	ExpiresAt time.Time  `json:"expires_at"`
 }
 
-func (q *Queries) CreateCLISession(ctx context.Context, arg CreateCLISessionParams) (CliSession, error) {
-	row := q.db.QueryRow(ctx, createCLISession,
+func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error) {
+	row := q.db.QueryRow(ctx, createSession,
 		arg.UserID,
 		arg.TokenHash,
+		arg.Client,
 		arg.Label,
 		arg.ExpiresAt,
 	)
-	var i CliSession
+	var i Session
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
 		&i.TokenHash,
+		&i.Client,
 		&i.Label,
 		&i.LastUsedAt,
 		&i.ExpiresAt,
@@ -45,17 +48,18 @@ func (q *Queries) CreateCLISession(ctx context.Context, arg CreateCLISessionPara
 }
 
 const getSessionByTokenHash = `-- name: GetSessionByTokenHash :one
-SELECT id, user_id, token_hash, label, last_used_at, expires_at, revoked_at, created_at FROM cli_sessions
+SELECT id, user_id, token_hash, client, label, last_used_at, expires_at, revoked_at, created_at FROM sessions
 WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()
 `
 
-func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash string) (CliSession, error) {
+func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash string) (Session, error) {
 	row := q.db.QueryRow(ctx, getSessionByTokenHash, tokenHash)
-	var i CliSession
+	var i Session
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
 		&i.TokenHash,
+		&i.Client,
 		&i.Label,
 		&i.LastUsedAt,
 		&i.ExpiresAt,
@@ -66,24 +70,25 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash string) (
 }
 
 const listActiveSessions = `-- name: ListActiveSessions :many
-SELECT id, user_id, token_hash, label, last_used_at, expires_at, revoked_at, created_at FROM cli_sessions
-WHERE user_id = $1 AND revoked_at IS NULL
+SELECT id, user_id, token_hash, client, label, last_used_at, expires_at, revoked_at, created_at FROM sessions
+WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()
 ORDER BY last_used_at DESC
 `
 
-func (q *Queries) ListActiveSessions(ctx context.Context, userID int64) ([]CliSession, error) {
+func (q *Queries) ListActiveSessions(ctx context.Context, userID int64) ([]Session, error) {
 	rows, err := q.db.Query(ctx, listActiveSessions, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []CliSession{}
+	items := []Session{}
 	for rows.Next() {
-		var i CliSession
+		var i Session
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
 			&i.TokenHash,
+			&i.Client,
 			&i.Label,
 			&i.LastUsedAt,
 			&i.ExpiresAt,
@@ -101,7 +106,7 @@ func (q *Queries) ListActiveSessions(ctx context.Context, userID int64) ([]CliSe
 }
 
 const revokeAllUserSessions = `-- name: RevokeAllUserSessions :exec
-UPDATE cli_sessions SET revoked_at = now()
+UPDATE sessions SET revoked_at = now()
 WHERE user_id = $1 AND revoked_at IS NULL
 `
 
@@ -111,7 +116,7 @@ func (q *Queries) RevokeAllUserSessions(ctx context.Context, userID int64) error
 }
 
 const revokeSession = `-- name: RevokeSession :exec
-UPDATE cli_sessions SET revoked_at = now() WHERE id = $1
+UPDATE sessions SET revoked_at = now() WHERE id = $1
 `
 
 func (q *Queries) RevokeSession(ctx context.Context, id int64) error {
@@ -120,10 +125,15 @@ func (q *Queries) RevokeSession(ctx context.Context, id int64) error {
 }
 
 const touchSession = `-- name: TouchSession :exec
-UPDATE cli_sessions SET last_used_at = now() WHERE id = $1
+UPDATE sessions SET last_used_at = now(), expires_at = $2 WHERE id = $1
 `
 
-func (q *Queries) TouchSession(ctx context.Context, id int64) error {
-	_, err := q.db.Exec(ctx, touchSession, id)
+type TouchSessionParams struct {
+	ID        int64     `json:"id"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+func (q *Queries) TouchSession(ctx context.Context, arg TouchSessionParams) error {
+	_, err := q.db.Exec(ctx, touchSession, arg.ID, arg.ExpiresAt)
 	return err
 }

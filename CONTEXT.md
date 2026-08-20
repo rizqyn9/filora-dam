@@ -7,19 +7,30 @@ across product docs, architecture, database, and code.
 
 ## People & Access
 
-**User** — A person in the family. Identity owned by Clerk; Filora keeps a local
-mirror row.
+**User** — A person in the family. Self-managed auth (email + bcrypt password).
+Invite-only registration — superuser invites via opaque token link.
 
 **Superuser** — The family owner. Full unrestricted access (wildcard permission).
+Created via `cmd/seed` on first setup.
 
 **Role (global)** — A named set of capabilities: `superuser`, `admin`, `member`,
-`viewer`. A user can hold multiple roles.
+`viewer`. A user can hold multiple roles. Roles are hardcoded in application
+code; only assignments are stored in DB (`user_roles` table).
 
 **Permission** — A single capability expressed as `resource:action` with a scope
 (`own` or `all`).
 
 **Membership** — Per-space access grant. An invited user gets one role on that
 space: `editor` or `viewer`. The space creator is always `owner`.
+
+**Session** — A server-side record for an authenticated client (web or CLI).
+Opaque random token (32 bytes), stored as SHA-256 hash. Sliding window TTL:
+web = 7 days idle, CLI = 90 days idle. Resolved via in-process LRU cache with
+DB fallback (zero external deps, no Redis).
+
+**Invitation** — An offer (email + role + space) to join Filora. Contains an
+opaque token (hashed in DB). Delivered manually (superuser shares link via
+WhatsApp/chat). Invitee visits registration URL, sets password, becomes a user.
 
 ---
 
@@ -76,31 +87,25 @@ An asset has ≥1 serving location and (eventually) ≥1 archive location. Faile
 locations are kept as audit trail; retries create new rows.
 
 **Account Election** — The strategy that picks which storage account within a
-layer receives a new upload. Deferred for MVP (hardcode single account).
+layer receives a new upload. MVP: first-fit (first active account with remaining
+capacity).
 
 **Archive Sync Job** — A background task that replicates an asset from serving
-layer to archive layer. Async, with retries. Dedicated table, not a generic job
-queue.
+layer to archive layer. Async, with exponential backoff retries. Dedicated table.
 
 **Quota** — Storage limit tracked per space (denormalized counter:
 `storage_quota_bytes` + `storage_used_bytes`). Incremented on upload, decremented
 when last reference removed. Also tracked per storage account for election logic.
 
-**CLI Session** — A server-side record for an authenticated terminal session.
-Stores hashed opaque token, label, last-used timestamp, and expiry. Supports
-multiple concurrent sessions per user, individually revocable.
-
-**Invitation** — An offer (email + role) to join a space. The invitee may not
-have an account yet; pending invitations are consumed on signup/login via Clerk.
-
 ---
 
 ## Clients
 
-**Web App** — React front-end. Thin client over the API. Auth via Clerk.
+**Web App** — React front-end. Thin client over the API. Auth via opaque session
+token (stored in memory/cookie).
 
-**CLI** — Go command-line client. Thin HTTP client, no business logic. Supports
-multiple concurrent sessions via opaque tokens.
+**CLI** — Go command-line client. Thin HTTP client, no business logic. Auth via
+same opaque token (longer idle TTL: 90 days).
 
 **API** — Go backend (Fiber). All business logic lives here. Source of truth for
 rules and orchestration.
@@ -115,3 +120,4 @@ rules and orchestration.
 | Preview strategy | Provider-side URL transform, images only | [ADR-002](./docs/adr/002-provider-side-preview.md) |
 | Tag model | Flat labels (not hierarchical) | [ADR-003](./docs/adr/003-flat-tags.md) |
 | Product positioning | Archive-first DAM | [ADR-004](./docs/adr/004-archive-first-dam.md) |
+| Auth | Self-managed, opaque tokens + in-process cache | [ADR-005](./docs/adr/005-self-managed-auth.md) |

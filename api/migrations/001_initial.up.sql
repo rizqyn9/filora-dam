@@ -14,22 +14,21 @@ CREATE TYPE storage_layer AS ENUM ('serving', 'archive');
 CREATE TYPE location_status AS ENUM ('pending', 'stored', 'failed');
 CREATE TYPE membership_role AS ENUM ('owner', 'editor', 'viewer');
 CREATE TYPE invitation_status AS ENUM ('pending', 'accepted', 'expired', 'revoked');
+CREATE TYPE client_type AS ENUM ('web', 'cli');
 
 -- ============================================================================
--- USERS (Clerk mirror)
+-- USERS (self-managed auth, invite-only)
 -- ============================================================================
 
 CREATE TABLE users (
     id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    clerk_id      text NOT NULL UNIQUE,
-    email         text NOT NULL,
+    email         text NOT NULL UNIQUE,
+    password_hash text NOT NULL,
     name          text NOT NULL DEFAULT '',
     avatar_url    text,
     created_at    timestamptz NOT NULL DEFAULT now(),
     updated_at    timestamptz NOT NULL DEFAULT now()
 );
-
-CREATE INDEX idx_users_email ON users (email);
 
 -- ============================================================================
 -- RBAC (roles hardcoded in code; DB stores assignments only)
@@ -42,6 +41,25 @@ CREATE TABLE user_roles (
     created_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (user_id, role_name)
 );
+
+-- ============================================================================
+-- SESSIONS (unified: web + CLI, opaque token with sliding window TTL)
+-- ============================================================================
+
+CREATE TABLE sessions (
+    id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id      bigint NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    token_hash   text NOT NULL UNIQUE,
+    client       client_type NOT NULL,
+    label        text NOT NULL DEFAULT '',
+    last_used_at timestamptz NOT NULL DEFAULT now(),
+    expires_at   timestamptz NOT NULL,
+    revoked_at   timestamptz,
+    created_at   timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_sessions_user ON sessions (user_id) WHERE revoked_at IS NULL;
+CREATE INDEX idx_sessions_token ON sessions (token_hash) WHERE revoked_at IS NULL;
 
 -- ============================================================================
 -- SPACES
@@ -73,7 +91,7 @@ CREATE TABLE space_members (
 );
 
 -- ============================================================================
--- INVITATIONS
+-- INVITATIONS (opaque token, manual link share)
 -- ============================================================================
 
 CREATE TABLE invitations (
@@ -82,6 +100,7 @@ CREATE TABLE invitations (
     email       text NOT NULL,
     role        membership_role NOT NULL DEFAULT 'viewer',
     status      invitation_status NOT NULL DEFAULT 'pending',
+    token_hash  text NOT NULL UNIQUE, -- SHA-256 of opaque invitation token
     invited_by  bigint NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     expires_at  timestamptz NOT NULL,
     created_at  timestamptz NOT NULL DEFAULT now(),
@@ -125,7 +144,6 @@ CREATE TABLE assets (
     updated_at        timestamptz NOT NULL DEFAULT now()
 );
 
--- Global dedup: find existing asset by hash
 CREATE UNIQUE INDEX idx_assets_checksum ON assets (checksum_sha256);
 
 -- ============================================================================
@@ -141,12 +159,10 @@ CREATE TABLE asset_references (
     deleted_at timestamptz -- soft delete
 );
 
--- One asset can appear once per folder within a space
 CREATE UNIQUE INDEX idx_asset_refs_in_folder
     ON asset_references (asset_id, space_id, folder_id)
     WHERE folder_id IS NOT NULL AND deleted_at IS NULL;
 
--- One asset can appear once at space root
 CREATE UNIQUE INDEX idx_asset_refs_at_root
     ON asset_references (asset_id, space_id)
     WHERE folder_id IS NULL AND deleted_at IS NULL;
@@ -180,12 +196,12 @@ CREATE TABLE asset_tags (
 CREATE TABLE storage_accounts (
     id                    bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     provider              storage_provider NOT NULL,
-    label                 text NOT NULL, -- human-readable: "Cloudinary #3"
+    label                 text NOT NULL,
     layer                 storage_layer NOT NULL,
-    credentials_encrypted bytea NOT NULL, -- application-encrypted JSON
+    credentials_encrypted bytea NOT NULL,
     is_active             boolean NOT NULL DEFAULT true,
-    quota_bytes           bigint NOT NULL DEFAULT 0, -- admin-set free-tier limit
-    used_bytes            bigint NOT NULL DEFAULT 0, -- denormalized counter
+    quota_bytes           bigint NOT NULL DEFAULT 0,
+    used_bytes            bigint NOT NULL DEFAULT 0,
     created_at            timestamptz NOT NULL DEFAULT now(),
     updated_at            timestamptz NOT NULL DEFAULT now()
 );
@@ -200,14 +216,13 @@ CREATE TABLE storage_locations (
     account_id  bigint NOT NULL REFERENCES storage_accounts (id) ON DELETE RESTRICT,
     layer       storage_layer NOT NULL,
     status      location_status NOT NULL DEFAULT 'pending',
-    remote_path text, -- provider-specific path/key
-    remote_url  text, -- public URL (serving layer) or null (archive)
-    error       text, -- last error message if failed
+    remote_path text,
+    remote_url  text,
+    error       text,
     created_at  timestamptz NOT NULL DEFAULT now(),
     updated_at  timestamptz NOT NULL DEFAULT now()
 );
 
--- Only one successful copy per asset per account
 CREATE UNIQUE INDEX idx_storage_loc_stored
     ON storage_locations (asset_id, account_id)
     WHERE status = 'stored';
@@ -222,7 +237,7 @@ CREATE INDEX idx_storage_loc_account ON storage_locations (account_id);
 CREATE TABLE archive_sync_jobs (
     id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     asset_id      uuid NOT NULL REFERENCES assets (id) ON DELETE CASCADE,
-    status        text NOT NULL DEFAULT 'pending', -- pending, processing, completed, failed
+    status        text NOT NULL DEFAULT 'pending',
     attempts      int NOT NULL DEFAULT 0,
     max_attempts  int NOT NULL DEFAULT 5,
     last_error    text,
@@ -235,20 +250,3 @@ CREATE TABLE archive_sync_jobs (
 CREATE INDEX idx_archive_jobs_pending
     ON archive_sync_jobs (next_retry_at)
     WHERE status IN ('pending', 'failed') AND attempts < max_attempts;
-
--- ============================================================================
--- CLI SESSIONS
--- ============================================================================
-
-CREATE TABLE cli_sessions (
-    id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    user_id     bigint NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-    token_hash  text NOT NULL UNIQUE,
-    label       text NOT NULL DEFAULT '',
-    last_used_at timestamptz NOT NULL DEFAULT now(),
-    expires_at  timestamptz NOT NULL,
-    revoked_at  timestamptz,
-    created_at  timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_cli_sessions_user ON cli_sessions (user_id) WHERE revoked_at IS NULL;

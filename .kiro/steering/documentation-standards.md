@@ -103,9 +103,8 @@ Use this table to resolve a knowledge need to the correct index file:
 
 | Area | Path |
 |------|------|
-| API modules (vertical slices) | `api/internal/modules/{account,asset,dashboard,folder,rbac,session,space,storage,tag}/` |
-| Auth & middleware | `api/internal/auth/`, `api/internal/server/middleware/` |
-| Clerk integration | `api/internal/clerk/` |
+| API modules (vertical slices) | `api/internal/modules/{auth,asset,dashboard,folder,rbac,space,storage,tag}/` |
+| Auth & middleware | `api/internal/auth/` |
 | Config & env | `api/internal/config/` |
 | Database layer (pgx pool) | `api/internal/database/` |
 | sqlc generated code | `api/internal/database/db/` |

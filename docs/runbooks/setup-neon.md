@@ -92,15 +92,15 @@ DATABASE_URL=postgresql://<user>:<password>@<host>.neon.tech/filora?sslmode=requ
 
 ## 6. Bootstrap Superuser
 
-After your first Clerk login (which triggers the webhook and creates your user row):
+Run the seed command:
 
-```sql
--- Find your user ID
-SELECT id, email FROM users;
-
--- Grant superuser role
-INSERT INTO user_roles (user_id, role_name) VALUES (<your-user-id>, 'superuser');
+```bash
+cd api
+go run cmd/seed/main.go
 ```
+
+Follow the prompts (email, name, password). This creates the first user with
+superuser role. See [setup-auth.md](./setup-auth.md) for the full auth flow.
 
 ## 7. Create Default Space
 

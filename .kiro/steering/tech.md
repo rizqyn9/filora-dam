@@ -16,8 +16,7 @@ Three independent apps at workspace root. No shared packages.
 | Query generation | sqlc |
 | Migrations | golang-migrate |
 | Validation | go-playground/validator v10 |
-| Auth (web) | Clerk (webhook + JIT user sync) |
-| Auth (CLI) | Opaque hashed tokens |
+| Auth (web + CLI) | Opaque tokens + in-process LRU cache |
 | Logging | zerolog |
 | Linting | golangci-lint |
 
@@ -62,7 +61,7 @@ All adapters implement a `StorageAdapter` interface. Business logic never touche
 | Service | Provider |
 |---------|----------|
 | Database | Neon (PostgreSQL) |
-| Auth/Identity | Clerk |
+| Auth/Identity | Self-managed (bcrypt + opaque tokens) |
 | Storage | Multi-provider pool (see above) |
 | Hosting | TBD |
 

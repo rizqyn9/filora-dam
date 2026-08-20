@@ -13,8 +13,7 @@ filora-dam/
 │   │   ├── server/main.go        # HTTP server entry + compose root
 │   │   └── worker/main.go        # Archive replication worker
 │   ├── internal/
-│   │   ├── auth/                  # Auth middleware, token validation
-│   │   ├── clerk/                 # Clerk webhook + user sync
+│   │   ├── auth/                  # Auth middleware, token cache
 │   │   ├── config/                # Env-based configuration
 │   │   ├── database/
 │   │   │   ├── db/                # sqlc-generated code

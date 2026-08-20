@@ -24,15 +24,16 @@ func (q *Queries) AcceptInvitation(ctx context.Context, id int64) error {
 }
 
 const createInvitation = `-- name: CreateInvitation :one
-INSERT INTO invitations (space_id, email, role, invited_by, expires_at)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, space_id, email, role, status, invited_by, expires_at, created_at, updated_at
+INSERT INTO invitations (space_id, email, role, token_hash, invited_by, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, space_id, email, role, status, token_hash, invited_by, expires_at, created_at, updated_at
 `
 
 type CreateInvitationParams struct {
 	SpaceID   uuid.UUID      `json:"space_id"`
 	Email     string         `json:"email"`
 	Role      MembershipRole `json:"role"`
+	TokenHash string         `json:"token_hash"`
 	InvitedBy int64          `json:"invited_by"`
 	ExpiresAt time.Time      `json:"expires_at"`
 }
@@ -42,6 +43,7 @@ func (q *Queries) CreateInvitation(ctx context.Context, arg CreateInvitationPara
 		arg.SpaceID,
 		arg.Email,
 		arg.Role,
+		arg.TokenHash,
 		arg.InvitedBy,
 		arg.ExpiresAt,
 	)
@@ -52,6 +54,7 @@ func (q *Queries) CreateInvitation(ctx context.Context, arg CreateInvitationPara
 		&i.Email,
 		&i.Role,
 		&i.Status,
+		&i.TokenHash,
 		&i.InvitedBy,
 		&i.ExpiresAt,
 		&i.CreatedAt,
@@ -72,7 +75,7 @@ func (q *Queries) ExpirePendingInvitations(ctx context.Context) error {
 }
 
 const getInvitationByID = `-- name: GetInvitationByID :one
-SELECT id, space_id, email, role, status, invited_by, expires_at, created_at, updated_at FROM invitations WHERE id = $1
+SELECT id, space_id, email, role, status, token_hash, invited_by, expires_at, created_at, updated_at FROM invitations WHERE id = $1
 `
 
 func (q *Queries) GetInvitationByID(ctx context.Context, id int64) (Invitation, error) {
@@ -84,6 +87,7 @@ func (q *Queries) GetInvitationByID(ctx context.Context, id int64) (Invitation, 
 		&i.Email,
 		&i.Role,
 		&i.Status,
+		&i.TokenHash,
 		&i.InvitedBy,
 		&i.ExpiresAt,
 		&i.CreatedAt,
@@ -92,44 +96,31 @@ func (q *Queries) GetInvitationByID(ctx context.Context, id int64) (Invitation, 
 	return i, err
 }
 
-const listPendingInvitationsByEmail = `-- name: ListPendingInvitationsByEmail :many
-SELECT id, space_id, email, role, status, invited_by, expires_at, created_at, updated_at FROM invitations
-WHERE email = $1 AND status = 'pending'
-ORDER BY created_at DESC
+const getInvitationByTokenHash = `-- name: GetInvitationByTokenHash :one
+SELECT id, space_id, email, role, status, token_hash, invited_by, expires_at, created_at, updated_at FROM invitations
+WHERE token_hash = $1 AND status = 'pending' AND expires_at > now()
 `
 
-func (q *Queries) ListPendingInvitationsByEmail(ctx context.Context, email string) ([]Invitation, error) {
-	rows, err := q.db.Query(ctx, listPendingInvitationsByEmail, email)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Invitation{}
-	for rows.Next() {
-		var i Invitation
-		if err := rows.Scan(
-			&i.ID,
-			&i.SpaceID,
-			&i.Email,
-			&i.Role,
-			&i.Status,
-			&i.InvitedBy,
-			&i.ExpiresAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) GetInvitationByTokenHash(ctx context.Context, tokenHash string) (Invitation, error) {
+	row := q.db.QueryRow(ctx, getInvitationByTokenHash, tokenHash)
+	var i Invitation
+	err := row.Scan(
+		&i.ID,
+		&i.SpaceID,
+		&i.Email,
+		&i.Role,
+		&i.Status,
+		&i.TokenHash,
+		&i.InvitedBy,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const listPendingInvitationsBySpace = `-- name: ListPendingInvitationsBySpace :many
-SELECT id, space_id, email, role, status, invited_by, expires_at, created_at, updated_at FROM invitations
+SELECT id, space_id, email, role, status, token_hash, invited_by, expires_at, created_at, updated_at FROM invitations
 WHERE space_id = $1 AND status = 'pending'
 ORDER BY created_at DESC
 `
@@ -149,6 +140,7 @@ func (q *Queries) ListPendingInvitationsBySpace(ctx context.Context, spaceID uui
 			&i.Email,
 			&i.Role,
 			&i.Status,
+			&i.TokenHash,
 			&i.InvitedBy,
 			&i.ExpiresAt,
 			&i.CreatedAt,

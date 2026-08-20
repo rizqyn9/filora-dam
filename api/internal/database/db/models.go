@@ -13,6 +13,48 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ClientType string
+
+const (
+	ClientTypeWeb ClientType = "web"
+	ClientTypeCli ClientType = "cli"
+)
+
+func (e *ClientType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ClientType(s)
+	case string:
+		*e = ClientType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ClientType: %T", src)
+	}
+	return nil
+}
+
+type NullClientType struct {
+	ClientType ClientType `json:"client_type"`
+	Valid      bool       `json:"valid"` // Valid is true if ClientType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullClientType) Scan(value interface{}) error {
+	if value == nil {
+		ns.ClientType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ClientType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullClientType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ClientType), nil
+}
+
 type InvitationStatus string
 
 const (
@@ -270,17 +312,6 @@ type AssetTag struct {
 	TagID   int64     `json:"tag_id"`
 }
 
-type CliSession struct {
-	ID         int64              `json:"id"`
-	UserID     int64              `json:"user_id"`
-	TokenHash  string             `json:"token_hash"`
-	Label      string             `json:"label"`
-	LastUsedAt time.Time          `json:"last_used_at"`
-	ExpiresAt  time.Time          `json:"expires_at"`
-	RevokedAt  pgtype.Timestamptz `json:"revoked_at"`
-	CreatedAt  time.Time          `json:"created_at"`
-}
-
 type Folder struct {
 	ID        uuid.UUID          `json:"id"`
 	SpaceID   uuid.UUID          `json:"space_id"`
@@ -297,10 +328,23 @@ type Invitation struct {
 	Email     string           `json:"email"`
 	Role      MembershipRole   `json:"role"`
 	Status    InvitationStatus `json:"status"`
+	TokenHash string           `json:"token_hash"`
 	InvitedBy int64            `json:"invited_by"`
 	ExpiresAt time.Time        `json:"expires_at"`
 	CreatedAt time.Time        `json:"created_at"`
 	UpdatedAt time.Time        `json:"updated_at"`
+}
+
+type Session struct {
+	ID         int64              `json:"id"`
+	UserID     int64              `json:"user_id"`
+	TokenHash  string             `json:"token_hash"`
+	Client     ClientType         `json:"client"`
+	Label      string             `json:"label"`
+	LastUsedAt time.Time          `json:"last_used_at"`
+	ExpiresAt  time.Time          `json:"expires_at"`
+	RevokedAt  pgtype.Timestamptz `json:"revoked_at"`
+	CreatedAt  time.Time          `json:"created_at"`
 }
 
 type Space struct {
@@ -355,13 +399,13 @@ type Tag struct {
 }
 
 type User struct {
-	ID        int64     `json:"id"`
-	ClerkID   string    `json:"clerk_id"`
-	Email     string    `json:"email"`
-	Name      string    `json:"name"`
-	AvatarUrl *string   `json:"avatar_url"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID           int64     `json:"id"`
+	Email        string    `json:"email"`
+	PasswordHash string    `json:"password_hash"`
+	Name         string    `json:"name"`
+	AvatarUrl    *string   `json:"avatar_url"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 type UserRole struct {

@@ -63,7 +63,6 @@ go build -o bin/worker cmd/worker/main.go
 | `PORT` | No | HTTP port (default: 8080) |
 | `ENVIRONMENT` | No | `development` or `production` |
 | `ENCRYPTION_KEY` | No | 32-byte hex for AES-256-GCM credential encryption |
-| `CLERK_WEBHOOK_SECRET` | No | Clerk webhook signing secret (whsec_...) |
 
 ## API Endpoints
 
@@ -72,7 +71,11 @@ All protected endpoints require `Authorization: Bearer <token>` header.
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/health` | No | Health check |
-| POST | `/webhooks/clerk` | No | Clerk user sync webhook |
+| POST | `/auth/login` | No | Login (email + password) |
+| POST | `/auth/register` | No | Register with invite token |
+| POST | `/api/v1/auth/logout` | Yes | Revoke current session |
+| GET | `/api/v1/auth/me` | Yes | Get current user |
+| POST | `/api/v1/auth/change-password` | Yes | Change password |
 | GET/POST | `/api/v1/spaces` | Yes | List/create spaces |
 | GET/PUT/DELETE | `/api/v1/spaces/:id` | Yes | Get/update/delete space |
 | GET/POST | `/api/v1/folders` | Yes | List/create folders |

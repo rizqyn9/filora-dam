@@ -3,70 +3,56 @@ package auth
 import (
 	"context"
 	"strings"
+	"time"
 
-	"github.com/clerk/clerk-sdk-go/v2/jwt"
 	"github.com/gofiber/fiber/v3"
 
+	"github.com/rizqyn9/filora-dam/api/internal/database/db"
 	"github.com/rizqyn9/filora-dam/api/internal/lib"
 )
 
-// UserResolver looks up the local user ID by Clerk ID.
-// Implemented by the account/user repository at the compose root.
-type UserResolver interface {
-	ResolveUserID(ctx context.Context, clerkID string) (int64, error)
+// SessionStore looks up sessions from the database (fallback when cache misses).
+type SessionStore interface {
+	GetByTokenHash(ctx context.Context, hash string) (*db.Session, error)
+	Touch(ctx context.Context, id int64, newExpiry time.Time) error
 }
 
-// Middleware returns a Fiber middleware that verifies Clerk JWTs.
-func Middleware(resolver UserResolver) fiber.Handler {
+// Middleware returns a Fiber middleware that authenticates requests via opaque tokens.
+// Flow: extract token → hash → check cache → fallback to DB → set user context.
+func Middleware(cache *TokenCache, store SessionStore, idleTTL func(db.ClientType) time.Duration) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		token := extractBearerToken(c)
-		if token == "" {
+		raw := extractBearerToken(c)
+		if raw == "" {
 			return lib.JSONError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "missing authorization token")
 		}
 
-		claims, err := jwt.Verify(c.Context(), &jwt.VerifyParams{Token: token})
-		if err != nil {
-			return lib.JSONError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "invalid token")
+		tokenHash := lib.HashToken(raw)
+
+		// Check cache first (no DB call)
+		if cached, ok := cache.Get(tokenHash); ok {
+			SetUser(c, &AuthUser{UserID: cached.UserID, SessionID: cached.SessionID})
+			return c.Next()
 		}
 
-		clerkID := claims.Subject
-		if clerkID == "" {
-			return lib.JSONError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "invalid token subject")
-		}
-
-		userID, err := resolver.ResolveUserID(c.Context(), clerkID)
-		if err != nil {
-			return lib.JSONError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "user not found")
-		}
-
-		SetUser(c, &AuthUser{
-			ClerkID: clerkID,
-			UserID:  userID,
-		})
-
-		return c.Next()
-	}
-}
-
-// CLITokenMiddleware verifies opaque CLI tokens.
-// tokenResolver returns (userID, error) given a raw token string.
-type CLITokenResolver interface {
-	ResolveToken(ctx context.Context, rawToken string) (int64, error)
-}
-
-func CLITokenMiddleware(resolver CLITokenResolver) fiber.Handler {
-	return func(c fiber.Ctx) error {
-		token := extractBearerToken(c)
-		if token == "" {
-			return lib.JSONError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "missing authorization token")
-		}
-
-		userID, err := resolver.ResolveToken(c.Context(), token)
+		// Cache miss → DB lookup
+		sess, err := store.GetByTokenHash(c.Context(), tokenHash)
 		if err != nil {
 			return lib.JSONError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "invalid or expired token")
 		}
 
-		SetUser(c, &AuthUser{UserID: userID})
+		// Sliding window: extend expiry
+		ttl := idleTTL(sess.Client)
+		newExpiry := time.Now().Add(ttl)
+		_ = store.Touch(c.Context(), sess.ID, newExpiry)
+
+		// Populate cache
+		cache.Set(tokenHash, &CachedSession{
+			SessionID: sess.ID,
+			UserID:    sess.UserID,
+			ExpiresAt: newExpiry,
+		})
+
+		SetUser(c, &AuthUser{UserID: sess.UserID, SessionID: sess.ID})
 		return c.Next()
 	}
 }
