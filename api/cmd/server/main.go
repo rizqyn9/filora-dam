@@ -13,6 +13,7 @@ import (
 	"github.com/rizqyn9/filora-dam/api/internal/config"
 	"github.com/rizqyn9/filora-dam/api/internal/database"
 	"github.com/rizqyn9/filora-dam/api/internal/database/db"
+	"github.com/rizqyn9/filora-dam/api/internal/modules/folder"
 	"github.com/rizqyn9/filora-dam/api/internal/modules/space"
 	"github.com/rizqyn9/filora-dam/api/internal/server"
 )
@@ -41,11 +42,16 @@ func main() {
 	spaceService := space.NewService(spaceRepo)
 	spaceHandler := space.NewHandler(spaceService)
 
+	folderRepo := folder.NewRepository(queries)
+	folderService := folder.NewService(folderRepo)
+	folderHandler := folder.NewHandler(folderService)
+
 	// --- Server ---
 	srv := server.New(logger)
 
 	api := srv.App.Group("/api/v1")
 	space.RegisterRoutes(api, spaceHandler)
+	folder.RegisterRoutes(api, folderHandler)
 
 	// Health check
 	srv.App.Get("/health", func(c fiber.Ctx) error {

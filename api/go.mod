@@ -3,6 +3,7 @@ module github.com/rizqyn9/filora-dam/api
 go 1.26.2
 
 require (
+	github.com/clerk/clerk-sdk-go/v2 v2.7.0
 	github.com/go-playground/validator/v10 v10.30.3
 	github.com/gofiber/fiber/v3 v3.5.0
 	github.com/google/uuid v1.6.0
@@ -13,6 +14,7 @@ require (
 require (
 	github.com/andybalholm/brotli v1.2.2 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
+	github.com/go-jose/go-jose/v3 v3.0.4 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/gofiber/schema v1.8.3 // indirect
