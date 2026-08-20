@@ -43,9 +43,14 @@ across multiple spaces. Physical bytes are stored once.
 **Tag** — A flat label for cross-cutting grouping, scoped per space. An asset can
 have many tags.
 
-**Trash (soft delete)** — Deleting an asset reference removes it from that
-location. The physical asset is destroyed only when zero references remain (and
-after a trash retention period).
+**Trash (soft delete)** — Deleting an asset reference marks `deleted_at` on that
+reference row. Deleting a folder marks `deleted_at` on the folder (contents
+hidden but recoverable). The physical asset is destroyed only when zero
+references remain and 30 days have passed (retention period).
+
+**Deduplication** — Global, by SHA-256 hash. If an uploaded file matches an
+existing asset's checksum, no new bytes are stored — the system creates a new
+reference to the existing asset instead.
 
 ---
 
@@ -66,13 +71,27 @@ implementation; pluggable for other providers. Every asset gets an archive copy
 asynchronously.
 
 **Storage Location** — A record that an asset's bytes exist at a specific account
-and path. An asset has ≥1 serving location and (eventually) ≥1 archive location.
+and path. Tracks `layer` (serving/archive) and `status` (pending/stored/failed).
+An asset has ≥1 serving location and (eventually) ≥1 archive location. Failed
+locations are kept as audit trail; retries create new rows.
 
 **Account Election** — The strategy that picks which storage account within a
 layer receives a new upload. Deferred for MVP (hardcode single account).
 
 **Archive Sync Job** — A background task that replicates an asset from serving
-layer to archive layer. Async, with retries.
+layer to archive layer. Async, with retries. Dedicated table, not a generic job
+queue.
+
+**Quota** — Storage limit tracked per space (denormalized counter:
+`storage_quota_bytes` + `storage_used_bytes`). Incremented on upload, decremented
+when last reference removed. Also tracked per storage account for election logic.
+
+**CLI Session** — A server-side record for an authenticated terminal session.
+Stores hashed opaque token, label, last-used timestamp, and expiry. Supports
+multiple concurrent sessions per user, individually revocable.
+
+**Invitation** — An offer (email + role) to join a space. The invitee may not
+have an account yet; pending invitations are consumed on signup/login via Clerk.
 
 ---
 
