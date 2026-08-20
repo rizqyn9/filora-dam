@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Lint Go files on save",
+      "trigger": "PostFileSave",
+      "description": "Runs golangci-lint with autofix on the api/ directory when a Go file is saved",
+      "matcher": "\\.go$",
+      "action": {
+        "type": "command",
+        "command": "cd api && golangci-lint run --fix ./...",
+        "timeout": 30
+      }
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Lint and format web files on save",
+      "trigger": "PostFileSave",
+      "description": "Runs oxlint with autofix on the web/ directory when a TS/JS file is saved",
+      "matcher": "\\.(ts|tsx|js|jsx)$",
+      "action": {
+        "type": "command",
+        "command": "cd web && bunx oxlint --fix .",
+        "timeout": 30
+      }
+    }
+  ]
+}

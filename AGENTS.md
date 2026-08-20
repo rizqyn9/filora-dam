@@ -4,10 +4,11 @@ Read this before any task. All AI agents (Claude Code, Kiro, Antigravity) follow
 the same rules here.
 
 ## Required reading (before changing code)
-1. `docs/README.md` — documentation index
-2. `docs/product/overview.md` — what Filora is
-3. `docs/architecture/overview.md` + `docs/architecture/project-structure.md` — how it fits together (dir trees, module anatomy, dependency rules live here)
-4. `docs/database/README.md` — schema is the source of truth for data
+1. `CONTEXT.md` — domain glossary (authoritative vocabulary for all terms)
+2. `docs/adr/` — architecture decision records (design choices and their rationale)
+3. `docs/product/overview.md` — what Filora is
+4. `docs/architecture/overview.md` + `docs/architecture/project-structure.md` — how it fits together
+5. `docs/database/README.md` — schema is the source of truth for data
 
 ## Project
 Filora is a multi-cloud Digital Asset Management (DAM) platform. Users upload,
@@ -113,6 +114,25 @@ sourcing, domain events, DI containers, plugin frameworks, microservices.
 Before changing code: understand the request → search existing code → follow
 conventions → reuse existing implementations → minimize changes → avoid unrelated
 refactors. When uncertain, choose the simplest implementation.
+
+## Domain vocabulary
+All domain terms are defined in `CONTEXT.md` at the repo root. Use the terms as
+defined there. Key: Space (not Gallery), Asset, Asset Reference, Tag (flat),
+Serving Layer (L1), Archive Layer (L2), Storage Account.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as local markdown files under `.scratch/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default canonical labels (needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` at root + `docs/adr/`. See `docs/agents/domain.md`.
 
 ## Final rule
 Filora is a product, not an architecture exercise. Every abstraction must justify
