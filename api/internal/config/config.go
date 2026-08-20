@@ -6,18 +6,20 @@ import (
 )
 
 type Config struct {
-	Port          string
-	DatabaseURL   string
-	Environment   string
-	EncryptionKey string // hex-encoded 32-byte AES key
+	Port               string
+	DatabaseURL        string
+	Environment        string
+	EncryptionKey      string // hex-encoded 32-byte AES key
+	ClerkWebhookSecret string
 }
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		Port:          envOrDefault("PORT", "8080"),
-		DatabaseURL:   os.Getenv("DATABASE_URL"),
-		Environment:   envOrDefault("ENVIRONMENT", "development"),
-		EncryptionKey: os.Getenv("ENCRYPTION_KEY"),
+		Port:               envOrDefault("PORT", "8080"),
+		DatabaseURL:        os.Getenv("DATABASE_URL"),
+		Environment:        envOrDefault("ENVIRONMENT", "development"),
+		EncryptionKey:      os.Getenv("ENCRYPTION_KEY"),
+		ClerkWebhookSecret: os.Getenv("CLERK_WEBHOOK_SECRET"),
 	}
 
 	if cfg.DatabaseURL == "" {

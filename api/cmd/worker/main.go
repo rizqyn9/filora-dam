@@ -12,6 +12,7 @@ import (
 	"github.com/rizqyn9/filora-dam/api/internal/config"
 	"github.com/rizqyn9/filora-dam/api/internal/database"
 	"github.com/rizqyn9/filora-dam/api/internal/database/db"
+	"github.com/rizqyn9/filora-dam/api/internal/lib"
 	"github.com/rizqyn9/filora-dam/api/internal/modules/storage"
 )
 
@@ -33,8 +34,24 @@ func main() {
 	defer pool.Close()
 
 	queries := db.New(pool)
+
+	decryptFn := func(ciphertext []byte) ([]byte, error) {
+		if cfg.EncryptionKey == "" {
+			return ciphertext, nil
+		}
+		return lib.Decrypt(ciphertext, cfg.EncryptionKey)
+	}
+	encryptFn := func(plaintext []byte) ([]byte, error) {
+		if cfg.EncryptionKey == "" {
+			return plaintext, nil
+		}
+		return lib.Encrypt(plaintext, cfg.EncryptionKey)
+	}
+
 	storageRepo := storage.NewRepository(queries)
-	worker := storage.NewWorker(queries, storageRepo, logger)
+	storageService := storage.NewService(storageRepo, encryptFn)
+	storageRegistry := storage.NewRegistry(storageRepo, decryptFn)
+	worker := storage.NewWorker(queries, storageRepo, storageService, storageRegistry, logger)
 
 	go func() {
 		quit := make(chan os.Signal, 1)

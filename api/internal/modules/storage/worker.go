@@ -13,13 +13,21 @@ import (
 
 // Worker processes archive sync jobs in a loop.
 type Worker struct {
-	queries *db.Queries
-	repo    *Repository
-	logger  zerolog.Logger
+	queries  *db.Queries
+	repo     *Repository
+	service  *Service
+	registry *Registry
+	logger   zerolog.Logger
 }
 
-func NewWorker(queries *db.Queries, repo *Repository, logger zerolog.Logger) *Worker {
-	return &Worker{queries: queries, repo: repo, logger: logger}
+func NewWorker(queries *db.Queries, repo *Repository, service *Service, registry *Registry, logger zerolog.Logger) *Worker {
+	return &Worker{
+		queries:  queries,
+		repo:     repo,
+		service:  service,
+		registry: registry,
+		logger:   logger,
+	}
 }
 
 // Run polls for pending archive jobs and processes them.
@@ -41,8 +49,7 @@ func (w *Worker) Run(ctx context.Context, interval time.Duration) {
 func (w *Worker) processNext(ctx context.Context) {
 	job, err := w.queries.ClaimNextArchiveJob(ctx)
 	if err != nil {
-		// No jobs available — not an error
-		return
+		return // no jobs available
 	}
 
 	w.logger.Info().Int64("job_id", job.ID).Str("asset_id", job.AssetID.String()).Msg("processing archive job")
@@ -65,13 +72,80 @@ func (w *Worker) processNext(ctx context.Context) {
 }
 
 func (w *Worker) archiveAsset(ctx context.Context, assetID uuid.UUID) error {
-	// TODO: implement actual archive copy
-	// 1. Get serving location for asset
-	// 2. Elect archive account
-	// 3. Download from serving → upload to archive
-	// 4. Create storage_location record for archive layer
-	_ = assetID
-	return fmt.Errorf("archive not implemented")
+	// 1. Get the serving location
+	servingLoc, err := w.repo.GetServingLocation(ctx, assetID)
+	if err != nil {
+		return fmt.Errorf("get serving location: %w", err)
+	}
+	if servingLoc.RemotePath == nil {
+		return fmt.Errorf("serving location has no remote path")
+	}
+
+	// 2. Get serving adapter and download the file
+	servingAdapter, err := w.registry.Get(ctx, servingLoc.AccountID)
+	if err != nil {
+		return fmt.Errorf("get serving adapter: %w", err)
+	}
+
+	body, err := servingAdapter.Download(ctx, *servingLoc.RemotePath)
+	if err != nil {
+		return fmt.Errorf("download from serving: %w", err)
+	}
+	defer body.Close()
+
+	// 3. Get the asset record for size info
+	asset, err := w.queries.GetAssetByID(ctx, assetID)
+	if err != nil {
+		return fmt.Errorf("get asset: %w", err)
+	}
+
+	// 4. Elect an archive account
+	archiveAccount, err := w.service.ElectAccount(ctx, db.StorageLayerArchive, asset.SizeBytes)
+	if err != nil {
+		return fmt.Errorf("elect archive account: %w", err)
+	}
+
+	// 5. Get archive adapter and upload
+	archiveAdapter, err := w.registry.Get(ctx, archiveAccount.ID)
+	if err != nil {
+		return fmt.Errorf("get archive adapter: %w", err)
+	}
+
+	key := fmt.Sprintf("archive/%s/%s", assetID.String(), asset.OriginalFilename)
+	result, err := archiveAdapter.Upload(ctx, UploadInput{
+		Key:         key,
+		Body:        body,
+		Size:        asset.SizeBytes,
+		ContentType: asset.MimeType,
+	})
+	if err != nil {
+		// Record failed location
+		_, _ = w.repo.CreateLocation(ctx, db.CreateStorageLocationParams{
+			AssetID:   assetID,
+			AccountID: archiveAccount.ID,
+			Layer:     db.StorageLayerArchive,
+			Status:    db.LocationStatusFailed,
+		})
+		return fmt.Errorf("upload to archive: %w", err)
+	}
+
+	// 6. Record successful archive location
+	_, err = w.repo.CreateLocation(ctx, db.CreateStorageLocationParams{
+		AssetID:    assetID,
+		AccountID:  archiveAccount.ID,
+		Layer:      db.StorageLayerArchive,
+		Status:     db.LocationStatusStored,
+		RemotePath: &result.RemotePath,
+		RemoteUrl:  &result.RemoteURL,
+	})
+	if err != nil {
+		return fmt.Errorf("record archive location: %w", err)
+	}
+
+	// 7. Increment archive account usage
+	_ = w.repo.IncrementUsage(ctx, archiveAccount.ID, asset.SizeBytes)
+
+	return nil
 }
 
 // CreateArchiveJob implements asset.JobCreator.

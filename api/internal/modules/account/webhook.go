@@ -1,45 +1,65 @@
 package account
 
 import (
+	"encoding/json"
+	"net/http"
+
+	svix "github.com/svix/svix-webhooks/go"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/rizqyn9/filora-dam/api/internal/lib"
 )
 
 // WebhookHandler handles Clerk webhook events for user sync.
 type WebhookHandler struct {
-	service *Service
+	service       *Service
+	webhookSecret string // Clerk webhook signing secret (whsec_...)
 }
 
-func NewWebhookHandler(service *Service) *WebhookHandler {
-	return &WebhookHandler{service: service}
+func NewWebhookHandler(service *Service, webhookSecret string) *WebhookHandler {
+	return &WebhookHandler{service: service, webhookSecret: webhookSecret}
 }
 
-// HandleWebhook processes Clerk webhook events.
-// In production, verify the webhook signature with the Clerk SDK.
+// HandleWebhook processes Clerk webhook events with signature verification.
 func (h *WebhookHandler) HandleWebhook(c fiber.Ctx) error {
-	// TODO: verify Clerk webhook signature (svix)
+	body := c.Body()
+
+	// Verify webhook signature if secret is configured
+	if h.webhookSecret != "" {
+		wh, err := svix.NewWebhook(h.webhookSecret)
+		if err != nil {
+			return lib.JSONError(c, fiber.StatusInternalServerError, "WEBHOOK_ERROR", "invalid webhook config")
+		}
+
+		headers := http.Header{}
+		headers.Set("svix-id", c.Get("svix-id"))
+		headers.Set("svix-timestamp", c.Get("svix-timestamp"))
+		headers.Set("svix-signature", c.Get("svix-signature"))
+
+		if err := wh.Verify(body, headers); err != nil {
+			return lib.JSONError(c, fiber.StatusUnauthorized, "WEBHOOK_INVALID", "invalid webhook signature")
+		}
+	}
 
 	var payload struct {
 		Type string `json:"type"`
 		Data struct {
-			ID            string  `json:"id"`
-			EmailAddress  string  `json:"email_address,omitempty"`
-			FirstName     string  `json:"first_name,omitempty"`
-			LastName      string  `json:"last_name,omitempty"`
-			ImageURL      *string `json:"image_url,omitempty"`
-			// Clerk sends email_addresses as array; simplified here
+			ID             string  `json:"id"`
+			FirstName      string  `json:"first_name"`
+			LastName       string  `json:"last_name"`
+			ImageURL       *string `json:"image_url"`
 			EmailAddresses []struct {
 				EmailAddress string `json:"email_address"`
-			} `json:"email_addresses,omitempty"`
+			} `json:"email_addresses"`
 		} `json:"data"`
 	}
 
-	if err := c.Bind().JSON(&payload); err != nil {
+	if err := json.Unmarshal(body, &payload); err != nil {
 		return lib.JSONError(c, fiber.StatusBadRequest, "INVALID_BODY", "invalid webhook payload")
 	}
 
-	email := payload.Data.EmailAddress
-	if email == "" && len(payload.Data.EmailAddresses) > 0 {
+	var email string
+	if len(payload.Data.EmailAddresses) > 0 {
 		email = payload.Data.EmailAddresses[0].EmailAddress
 	}
 

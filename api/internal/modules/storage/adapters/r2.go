@@ -7,7 +7,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/rizqyn9/filora-dam/api/internal/modules/storage"
 )
 
 // R2Credentials are the fields expected in the encrypted credentials JSON.
@@ -19,7 +18,7 @@ type R2Credentials struct {
 	PublicURL   string `json:"public_url"` // optional, for serving layer
 }
 
-// R2Adapter implements storage.Adapter for Cloudflare R2 (S3-compatible).
+// R2Adapter implements Adapter for Cloudflare R2 (S3-compatible).
 type R2Adapter struct {
 	client    *s3.Client
 	bucket    string
@@ -42,7 +41,7 @@ func NewR2Adapter(creds R2Credentials) *R2Adapter {
 	}
 }
 
-func (a *R2Adapter) Upload(ctx context.Context, input storage.UploadInput) (*storage.UploadResult, error) {
+func (a *R2Adapter) Upload(ctx context.Context, input UploadInput) (*UploadResult, error) {
 	_, err := a.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      &a.bucket,
 		Key:         &input.Key,
@@ -58,7 +57,7 @@ func (a *R2Adapter) Upload(ctx context.Context, input storage.UploadInput) (*sto
 		remoteURL = fmt.Sprintf("%s/%s", a.publicURL, input.Key)
 	}
 
-	return &storage.UploadResult{
+	return &UploadResult{
 		RemotePath: input.Key,
 		RemoteURL:  remoteURL,
 	}, nil
@@ -87,4 +86,4 @@ func (a *R2Adapter) Download(ctx context.Context, key string) (io.ReadCloser, er
 }
 
 // Ensure R2Adapter implements the Adapter interface.
-var _ storage.Adapter = (*R2Adapter)(nil)
+var _ Adapter = (*R2Adapter)(nil)

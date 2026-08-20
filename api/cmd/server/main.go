@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog"
@@ -44,21 +45,26 @@ func main() {
 
 	queries := db.New(pool)
 
-	// --- Encryption ---
+	// --- Crypto ---
 	encryptFn := func(plaintext []byte) ([]byte, error) {
 		if cfg.EncryptionKey == "" {
-			// Development fallback: no encryption
 			return plaintext, nil
 		}
 		return lib.Encrypt(plaintext, cfg.EncryptionKey)
 	}
+	decryptFn := func(ciphertext []byte) ([]byte, error) {
+		if cfg.EncryptionKey == "" {
+			return ciphertext, nil
+		}
+		return lib.Decrypt(ciphertext, cfg.EncryptionKey)
+	}
 
 	// --- Compose modules ---
 
-	// Account (Clerk user sync + auth resolver)
+	// Account
 	accountRepo := account.NewRepository(queries)
 	accountService := account.NewService(accountRepo)
-	accountWebhook := account.NewWebhookHandler(accountService)
+	accountWebhook := account.NewWebhookHandler(accountService, cfg.ClerkWebhookSecret)
 
 	// Spaces
 	spaceRepo := space.NewRepository(queries)
@@ -84,27 +90,28 @@ func main() {
 	storageRepo := storage.NewRepository(queries)
 	storageService := storage.NewService(storageRepo, encryptFn)
 	storageHandler := storage.NewHandler(storageService)
+	storageRegistry := storage.NewRegistry(storageRepo, decryptFn)
+	storageUploader := storage.NewUploader(storageRegistry, storageRepo)
 
-	// Archive worker (also implements JobCreator)
-	archiveWorker := storage.NewWorker(queries, storageRepo, logger)
+	// Archive worker
+	archiveWorker := storage.NewWorker(queries, storageRepo, storageService, storageRegistry, logger)
 
 	// Assets
 	assetRepo := asset.NewRepository(queries)
-	assetService := asset.NewService(assetRepo, storageService, nil, archiveWorker)
+	assetService := asset.NewService(assetRepo, storageService, storageUploader, archiveWorker)
 	assetHandler := asset.NewHandler(assetService)
 
 	// --- Server ---
 	srv := server.New(logger)
 
-	// Public routes (no auth)
+	// Public routes
 	srv.App.Get("/health", func(c fiber.Ctx) error {
 		return c.SendString("ok")
 	})
 	account.RegisterRoutes(srv.App, accountWebhook)
 
-	// Protected routes (auth required)
+	// Protected routes
 	api := srv.App.Group("/api/v1", auth.Middleware(accountService))
-
 	space.RegisterRoutes(api, spaceHandler)
 	folder.RegisterRoutes(api, folderHandler)
 	tag.RegisterRoutes(api, tagHandler)
@@ -112,12 +119,15 @@ func main() {
 	storage.RegisterRoutes(api, storageHandler)
 	asset.RegisterRoutes(api, assetHandler)
 
+	// --- Archive worker (background) ---
+	go archiveWorker.Run(ctx, 10*time.Second)
+
 	// --- Graceful shutdown ---
 	go func() {
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 		<-quit
-		logger.Info().Msg("shutting down server")
+		logger.Info().Msg("shutting down")
 		cancel()
 		_ = srv.App.Shutdown()
 	}()
