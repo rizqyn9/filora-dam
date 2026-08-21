@@ -4,6 +4,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 
+	"github.com/rizqyn9/filora-dam/api/internal/auth"
 	"github.com/rizqyn9/filora-dam/api/internal/lib"
 )
 
@@ -30,10 +31,12 @@ func (h *Handler) GetSpace(c fiber.Ctx) error {
 }
 
 func (h *Handler) ListSpaces(c fiber.Ctx) error {
-	// TODO: extract user ID from auth context
-	userID := int64(1) // placeholder
+	user := auth.GetUser(c)
+	if user == nil {
+		return lib.JSONError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "not authenticated")
+	}
 
-	spaces, err := h.service.ListSpaces(c.Context(), userID)
+	spaces, err := h.service.ListSpaces(c.Context(), user.UserID)
 	if err != nil {
 		return lib.JSONError(c, fiber.StatusInternalServerError, "INTERNAL_ERROR", "failed to list spaces")
 	}
@@ -42,6 +45,11 @@ func (h *Handler) ListSpaces(c fiber.Ctx) error {
 }
 
 func (h *Handler) CreateSpace(c fiber.Ctx) error {
+	user := auth.GetUser(c)
+	if user == nil {
+		return lib.JSONError(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "not authenticated")
+	}
+
 	var req CreateSpaceRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return lib.JSONError(c, fiber.StatusBadRequest, "INVALID_BODY", "invalid request body")
@@ -51,10 +59,7 @@ func (h *Handler) CreateSpace(c fiber.Ctx) error {
 		return lib.JSONError(c, fiber.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 	}
 
-	// TODO: extract user ID from auth context
-	userID := int64(1) // placeholder
-
-	space, err := h.service.CreateSpace(c.Context(), userID, req)
+	space, err := h.service.CreateSpace(c.Context(), user.UserID, req)
 	if err != nil {
 		return lib.JSONError(c, fiber.StatusInternalServerError, "INTERNAL_ERROR", "failed to create space")
 	}
