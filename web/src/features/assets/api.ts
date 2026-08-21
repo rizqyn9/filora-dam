@@ -79,3 +79,30 @@ export function useUpload(spaceId: string, folderId?: string) {
     },
   });
 }
+
+export function useRenameAsset(spaceId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ assetId, name }: { assetId: string; name: string }) =>
+      api(`/assets/${assetId}/rename`, {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["assets", spaceId] });
+    },
+  });
+}
+
+export function useDeleteAssetRef(spaceId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (refId: number) =>
+      api(`/assets/references/${refId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["assets", spaceId] });
+    },
+  });
+}
