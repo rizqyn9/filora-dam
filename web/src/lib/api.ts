@@ -1,3 +1,5 @@
+import { useAuthStore } from "@/features/auth/auth-store";
+
 const BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
 interface ApiError {
@@ -16,15 +18,16 @@ export class ApiRequestError extends Error {
 }
 
 /** Thin fetch wrapper that handles the standard Filora API response envelope. */
-export async function api<T>(
-  path: string,
-  init?: RequestInit,
-): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    credentials: "include",
+export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = useAuthStore.getState().token;
+  // Public auth routes live at /auth/*, protected routes at /api/v1/*
+  const url = path.startsWith("/auth") ? path : `${BASE}${path}`;
+
+  const res = await fetch(url, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init?.headers,
     },
   });
