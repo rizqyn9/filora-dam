@@ -1,16 +1,15 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useParams } from "@tanstack/react-router";
 
-export const Route = createFileRoute(
-  "/_authenticated/spaces/$spaceId/",
-)({
+import { AssetBrowser } from "@/components/assets/asset-browser";
+
+export const Route = createFileRoute("/_authenticated/spaces/$spaceId/")({
   component: SpaceRootPage,
 });
 
 function SpaceRootPage() {
-  // Asset browser wired in ticket 06
-  return (
-    <div className="flex h-full items-center justify-center">
-      <p className="text-muted-foreground">Space root — assets will appear here</p>
-    </div>
-  );
+  const { spaceId } = useParams({
+    from: "/_authenticated/spaces/$spaceId/",
+  });
+
+  return <AssetBrowser spaceId={spaceId} />;
 }

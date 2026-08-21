@@ -8,13 +8,23 @@ import (
 	"github.com/rizqyn9/filora-dam/api/internal/database/db"
 )
 
+// StorageRepo is the interface the storage service needs from its data layer.
+type StorageRepo interface {
+	ListAll(ctx context.Context) ([]db.StorageAccount, error)
+	ListActiveByLayer(ctx context.Context, layer db.StorageLayer) ([]db.StorageAccount, error)
+	GetByID(ctx context.Context, id int64) (*db.StorageAccount, error)
+	Create(ctx context.Context, params db.CreateStorageAccountParams) (*db.StorageAccount, error)
+	Update(ctx context.Context, params db.UpdateStorageAccountParams) error
+	Deactivate(ctx context.Context, id int64) error
+	IncrementUsage(ctx context.Context, id int64, bytes int64) error
+}
+
 type Service struct {
-	repo *Repository
-	// encryptFn encrypts credentials JSON before storage.
+	repo      StorageRepo
 	encryptFn func(plaintext []byte) ([]byte, error)
 }
 
-func NewService(repo *Repository, encryptFn func([]byte) ([]byte, error)) *Service {
+func NewService(repo StorageRepo, encryptFn func([]byte) ([]byte, error)) *Service {
 	return &Service{repo: repo, encryptFn: encryptFn}
 }
 

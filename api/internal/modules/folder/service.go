@@ -11,11 +11,24 @@ import (
 	"github.com/rizqyn9/filora-dam/api/internal/database/db"
 )
 
-type Service struct {
-	repo *Repository
+// FolderRepo is the interface the folder service needs.
+type FolderRepo interface {
+	GetByID(ctx context.Context, id uuid.UUID) (*db.Folder, error)
+	ListByParent(ctx context.Context, spaceID, parentID uuid.UUID) ([]db.Folder, error)
+	ListRoot(ctx context.Context, spaceID uuid.UUID) ([]db.Folder, error)
+	Create(ctx context.Context, spaceID uuid.UUID, parentID *uuid.UUID, name string) (*db.Folder, error)
+	Rename(ctx context.Context, id uuid.UUID, name string) error
+	Move(ctx context.Context, id uuid.UUID, parentID *uuid.UUID) error
+	SoftDelete(ctx context.Context, id uuid.UUID) error
+	Restore(ctx context.Context, id uuid.UUID) error
+	GetAncestors(ctx context.Context, id uuid.UUID) ([]db.GetFolderAncestorsRow, error)
 }
 
-func NewService(repo *Repository) *Service {
+type Service struct {
+	repo FolderRepo
+}
+
+func NewService(repo FolderRepo) *Service {
 	return &Service{repo: repo}
 }
 

@@ -9,11 +9,22 @@ import (
 	"github.com/rizqyn9/filora-dam/api/internal/database/db"
 )
 
-type Service struct {
-	repo *Repository
+// TagRepo is the interface the tag service needs.
+type TagRepo interface {
+	GetByID(ctx context.Context, id int64) (*db.Tag, error)
+	ListBySpace(ctx context.Context, spaceID uuid.UUID) ([]db.Tag, error)
+	Create(ctx context.Context, spaceID uuid.UUID, name string) (*db.Tag, error)
+	Delete(ctx context.Context, id int64) error
+	AddAssetTag(ctx context.Context, assetID uuid.UUID, tagID int64) error
+	RemoveAssetTag(ctx context.Context, assetID uuid.UUID, tagID int64) error
+	ListByAsset(ctx context.Context, assetID uuid.UUID) ([]db.Tag, error)
 }
 
-func NewService(repo *Repository) *Service {
+type Service struct {
+	repo TagRepo
+}
+
+func NewService(repo TagRepo) *Service {
 	return &Service{repo: repo}
 }
 
