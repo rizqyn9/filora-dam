@@ -30,6 +30,9 @@ check: fmt vet lint build
 sqlc:
 	sqlc generate
 
+seed:
+	go run cmd/seed/main.go
+
 # --- Clean ---
 clean:
 	rm -rf bin/

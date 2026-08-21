@@ -10,6 +10,11 @@ type Config struct {
 	DatabaseURL   string
 	Environment   string
 	EncryptionKey string // hex-encoded 32-byte AES key (optional in dev)
+
+	// Axiom OTel
+	AxiomEndpoint string // default: api.axiom.co
+	AxiomToken    string // Axiom API token
+	AxiomDataset  string // Axiom dataset name
 }
 
 func Load() (*Config, error) {
@@ -18,6 +23,9 @@ func Load() (*Config, error) {
 		DatabaseURL:   os.Getenv("DATABASE_URL"),
 		Environment:   envOrDefault("ENVIRONMENT", "development"),
 		EncryptionKey: os.Getenv("ENCRYPTION_KEY"),
+		AxiomEndpoint: envOrDefault("AXIOM_ENDPOINT", "api.axiom.co"),
+		AxiomToken:    os.Getenv("AXIOM_TOKEN"),
+		AxiomDataset:  envOrDefault("AXIOM_DATASET", "filora"),
 	}
 
 	if cfg.DatabaseURL == "" {

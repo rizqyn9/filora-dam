@@ -24,6 +24,7 @@ import (
 	"github.com/rizqyn9/filora-dam/api/internal/modules/storage"
 	"github.com/rizqyn9/filora-dam/api/internal/modules/tag"
 	"github.com/rizqyn9/filora-dam/api/internal/server"
+	"github.com/rizqyn9/filora-dam/api/internal/telemetry"
 )
 
 func main() {
@@ -38,6 +39,20 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// --- OpenTelemetry ---
+	otelShutdown, err := telemetry.Init(ctx, telemetry.Config{
+		ServiceName:    "filora-api",
+		ServiceVersion: "1.0.0",
+		Environment:    cfg.Environment,
+		Endpoint:       cfg.AxiomEndpoint,
+		Token:          cfg.AxiomToken,
+		Dataset:        cfg.AxiomDataset,
+	})
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to init otel")
+	}
+	defer func() { _ = otelShutdown(context.Background()) }()
 
 	pool, err := database.NewPool(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -93,6 +108,9 @@ func main() {
 
 	// --- Server ---
 	srv := server.New(logger)
+
+	// OTel tracing middleware (first in chain)
+	srv.App.Use(telemetry.FiberMiddleware())
 
 	// Public routes (no auth)
 	srv.App.Get("/health", func(c fiber.Ctx) error {
