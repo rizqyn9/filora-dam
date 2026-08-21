@@ -20,6 +20,10 @@ primary_region = "sin"  # Singapore (closest to Neon ap-southeast-1)
     hard_limit = 250
     soft_limit = 200
 
+[deploy]
+  strategy = "immediate"
+
 [[vm]]
+  count = 1
   size = "shared-cpu-1x"
   memory = "256mb"
