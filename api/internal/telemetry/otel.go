@@ -26,23 +26,40 @@ type Config struct {
 	Environment    string
 	Endpoint       string // Axiom: api.axiom.co
 	Token          string // Axiom API token
-	Dataset        string // Axiom dataset for traces + logs
+	Dataset        string // Axiom dataset for traces + logs (X-Axiom-Dataset)
+	MetricsDataset string // Axiom dataset for metrics (X-Axiom-Metrics-Dataset)
 }
 
 // Shutdown is returned by Init and should be called on application exit.
 type Shutdown func(ctx context.Context) error
 
 // Init configures OpenTelemetry with OTLP/HTTP exporters for traces, metrics, and logs.
-// All three signals are sent to Axiom. Returns a shutdown function to flush pending data.
+// Per Axiom docs:
+// - Traces + Logs use header: X-Axiom-Dataset
+// - Metrics use header: X-Axiom-Metrics-Dataset
+// - Each signal type should target a separate dataset.
 func Init(ctx context.Context, cfg Config) (Shutdown, error) {
 	if cfg.Endpoint == "" || cfg.Token == "" {
 		return func(_ context.Context) error { return nil }, nil
 	}
 
-	headers := map[string]string{
+	// Common headers (auth only)
+	authHeader := map[string]string{
+		"Authorization": "Bearer " + cfg.Token,
+	}
+
+	// Traces + Logs headers
+	dataHeaders := map[string]string{
 		"Authorization":   "Bearer " + cfg.Token,
 		"X-Axiom-Dataset": cfg.Dataset,
 	}
+
+	// Metrics headers (different header name per Axiom docs)
+	metricsHeaders := map[string]string{
+		"Authorization":           "Bearer " + cfg.Token,
+		"X-Axiom-Metrics-Dataset": cfg.MetricsDataset,
+	}
+	_ = authHeader // not used directly
 
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
@@ -58,7 +75,7 @@ func Init(ctx context.Context, cfg Config) (Shutdown, error) {
 	// --- Traces ---
 	traceExp, err := otlptracehttp.New(ctx,
 		otlptracehttp.WithEndpoint(cfg.Endpoint),
-		otlptracehttp.WithHeaders(headers),
+		otlptracehttp.WithHeaders(dataHeaders),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create trace exporter: %w", err)
@@ -74,7 +91,7 @@ func Init(ctx context.Context, cfg Config) (Shutdown, error) {
 	// --- Metrics ---
 	metricExp, err := otlpmetrichttp.New(ctx,
 		otlpmetrichttp.WithEndpoint(cfg.Endpoint),
-		otlpmetrichttp.WithHeaders(headers),
+		otlpmetrichttp.WithHeaders(metricsHeaders),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create metric exporter: %w", err)
@@ -89,7 +106,7 @@ func Init(ctx context.Context, cfg Config) (Shutdown, error) {
 	// --- Logs ---
 	logExp, err := otlploghttp.New(ctx,
 		otlploghttp.WithEndpoint(cfg.Endpoint),
-		otlploghttp.WithHeaders(headers),
+		otlploghttp.WithHeaders(dataHeaders),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create log exporter: %w", err)
@@ -107,7 +124,6 @@ func Init(ctx context.Context, cfg Config) (Shutdown, error) {
 		propagation.Baggage{},
 	))
 
-	// Shutdown flushes all providers
 	shutdown := func(ctx context.Context) error {
 		var errs []error
 		if err := tp.Shutdown(ctx); err != nil {

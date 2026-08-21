@@ -48,6 +48,7 @@ func main() {
 		Endpoint:       cfg.AxiomEndpoint,
 		Token:          cfg.AxiomToken,
 		Dataset:        cfg.AxiomDataset,
+		MetricsDataset: cfg.AxiomMetricsDataset,
 	})
 	if err != nil {
 		logger.Fatal().Err(err).Msg("failed to init otel")
