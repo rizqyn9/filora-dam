@@ -1,11 +1,11 @@
-import { LayoutGrid, List, Upload } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useAssets } from "@/features/assets/api";
+import { useSpaces } from "@/features/spaces/api";
 import { useUiStore } from "@/stores/ui-store";
 
+import { ContentToolbar } from "./content-toolbar";
 import { FileGrid, FileGridSkeleton } from "./file-grid";
 import { FileList, FileListSkeleton } from "./file-list";
 
@@ -18,8 +18,10 @@ interface AssetBrowserProps {
 
 export function AssetBrowser({ spaceId, folderId }: AssetBrowserProps) {
   const viewMode = useUiStore((s) => s.viewMode);
-  const setViewMode = useUiStore((s) => s.setViewMode);
   const [offset, setOffset] = useState(0);
+
+  const { data: spaces } = useSpaces();
+  const spaceName = spaces?.find((s) => s.id === spaceId)?.name;
 
   const { data: assets, isLoading } = useAssets({
     spaceId,
@@ -30,28 +32,11 @@ export function AssetBrowser({ spaceId, folderId }: AssetBrowserProps) {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 border-b px-4 py-2">
-        <div className="flex-1" />
-        <ToggleGroup
-          value={[viewMode]}
-          onValueChange={(v) => {
-            if (v.length) setViewMode(v[0] as "grid" | "list");
-          }}
-          size="sm"
-        >
-          <ToggleGroupItem value="grid" aria-label="Grid view">
-            <LayoutGrid className="size-4" />
-          </ToggleGroupItem>
-          <ToggleGroupItem value="list" aria-label="List view">
-            <List className="size-4" />
-          </ToggleGroupItem>
-        </ToggleGroup>
-        <Button size="sm" variant="outline" disabled>
-          <Upload className="mr-1.5 size-4" />
-          Upload
-        </Button>
-      </div>
+      <ContentToolbar
+        spaceId={spaceId}
+        spaceName={spaceName}
+        folderId={folderId}
+      />
 
       {/* Content */}
       <div className="flex-1 overflow-auto">
