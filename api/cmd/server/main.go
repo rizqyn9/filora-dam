@@ -54,6 +54,11 @@ func main() {
 	}
 	defer func() { _ = otelShutdown(context.Background()) }()
 
+	// Route slog → OTel logs (sent to Axiom alongside traces + metrics)
+	if cfg.AxiomToken != "" {
+		telemetry.SetupSlog()
+	}
+
 	pool, err := database.NewPool(ctx, cfg.DatabaseURL)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("failed to connect to database")

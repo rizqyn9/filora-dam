@@ -7,9 +7,12 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	otellog "go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
@@ -18,23 +21,27 @@ import (
 
 // Config holds OTel configuration.
 type Config struct {
-	ServiceName    string // e.g. "filora-api"
+	ServiceName    string
 	ServiceVersion string
-	Environment    string // development, production
-	Endpoint       string // Axiom OTLP endpoint: "api.axiom.co"
+	Environment    string
+	Endpoint       string // Axiom: api.axiom.co
 	Token          string // Axiom API token
-	Dataset        string // Axiom dataset name
+	Dataset        string // Axiom dataset for traces + logs
 }
 
 // Shutdown is returned by Init and should be called on application exit.
 type Shutdown func(ctx context.Context) error
 
-// Init configures OpenTelemetry with OTLP/HTTP exporters pointed at Axiom.
-// Returns a shutdown function to flush pending telemetry.
+// Init configures OpenTelemetry with OTLP/HTTP exporters for traces, metrics, and logs.
+// All three signals are sent to Axiom. Returns a shutdown function to flush pending data.
 func Init(ctx context.Context, cfg Config) (Shutdown, error) {
 	if cfg.Endpoint == "" || cfg.Token == "" {
-		// OTel disabled — return no-op shutdown
 		return func(_ context.Context) error { return nil }, nil
+	}
+
+	headers := map[string]string{
+		"Authorization":   "Bearer " + cfg.Token,
+		"X-Axiom-Dataset": cfg.Dataset,
 	}
 
 	res, err := resource.New(ctx,
@@ -48,13 +55,10 @@ func Init(ctx context.Context, cfg Config) (Shutdown, error) {
 		return nil, fmt.Errorf("create otel resource: %w", err)
 	}
 
-	// --- Trace exporter ---
+	// --- Traces ---
 	traceExp, err := otlptracehttp.New(ctx,
 		otlptracehttp.WithEndpoint(cfg.Endpoint),
-		otlptracehttp.WithHeaders(map[string]string{
-			"Authorization":   "Bearer " + cfg.Token,
-			"X-Axiom-Dataset": cfg.Dataset,
-		}),
+		otlptracehttp.WithHeaders(headers),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create trace exporter: %w", err)
@@ -67,13 +71,10 @@ func Init(ctx context.Context, cfg Config) (Shutdown, error) {
 	)
 	otel.SetTracerProvider(tp)
 
-	// --- Metric exporter ---
+	// --- Metrics ---
 	metricExp, err := otlpmetrichttp.New(ctx,
 		otlpmetrichttp.WithEndpoint(cfg.Endpoint),
-		otlpmetrichttp.WithHeaders(map[string]string{
-			"Authorization":   "Bearer " + cfg.Token,
-			"X-Axiom-Dataset": cfg.Dataset,
-		}),
+		otlpmetrichttp.WithHeaders(headers),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create metric exporter: %w", err)
@@ -85,19 +86,37 @@ func Init(ctx context.Context, cfg Config) (Shutdown, error) {
 	)
 	otel.SetMeterProvider(mp)
 
+	// --- Logs ---
+	logExp, err := otlploghttp.New(ctx,
+		otlploghttp.WithEndpoint(cfg.Endpoint),
+		otlploghttp.WithHeaders(headers),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create log exporter: %w", err)
+	}
+
+	lp := log.NewLoggerProvider(
+		log.WithProcessor(log.NewBatchProcessor(logExp, log.WithExportInterval(5*time.Second))),
+		log.WithResource(res),
+	)
+	otellog.SetLoggerProvider(lp)
+
 	// --- Propagator ---
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
 		propagation.Baggage{},
 	))
 
-	// Shutdown flushes both providers
+	// Shutdown flushes all providers
 	shutdown := func(ctx context.Context) error {
 		var errs []error
 		if err := tp.Shutdown(ctx); err != nil {
 			errs = append(errs, err)
 		}
 		if err := mp.Shutdown(ctx); err != nil {
+			errs = append(errs, err)
+		}
+		if err := lp.Shutdown(ctx); err != nil {
 			errs = append(errs, err)
 		}
 		if len(errs) > 0 {
