@@ -1,3 +1,4 @@
+import { useParams } from "@tanstack/react-router";
 import { LogOut, Menu } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -9,11 +10,13 @@ import { useLogout, useMe } from "@/features/auth/api";
 import { getInitials } from "@/lib/utils";
 import { useUiStore } from "@/stores/ui-store";
 
+import { FolderTree } from "./folder-tree";
 import { SpaceSwitcher } from "./space-switcher";
 
 function SidebarContent() {
   const { data: user } = useMe();
   const logout = useLogout();
+  const params = useParams({ strict: false }) as { spaceId?: string };
 
   return (
     <div className="flex h-full flex-col">
@@ -21,9 +24,15 @@ function SidebarContent() {
       <SpaceSwitcher />
       <Separator />
 
-      {/* Folder tree placeholder — wired in ticket 05 */}
-      <ScrollArea className="flex-1 p-2">
-        <p className="p-2 text-xs text-muted-foreground">Folders</p>
+      {/* Folder tree */}
+      <ScrollArea className="flex-1 py-2">
+        {params.spaceId ? (
+          <FolderTree spaceId={params.spaceId} />
+        ) : (
+          <p className="px-3 py-2 text-xs text-muted-foreground">
+            Select a space
+          </p>
+        )}
       </ScrollArea>
 
       {/* User footer */}

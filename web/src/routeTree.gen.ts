@@ -13,6 +13,8 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedSpacesSpaceIdRouteImport } from './routes/_authenticated/spaces/$spaceId'
+import { Route as AuthenticatedSpacesSpaceIdIndexRouteImport } from './routes/_authenticated/spaces/$spaceId/index'
+import { Route as AuthenticatedSpacesSpaceIdFoldersFolderIdRouteImport } from './routes/_authenticated/spaces/$spaceId/folders/$folderId'
 
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
   id: '/_authenticated',
@@ -34,35 +36,59 @@ const AuthenticatedSpacesSpaceIdRoute =
     path: '/spaces/$spaceId',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedSpacesSpaceIdIndexRoute =
+  AuthenticatedSpacesSpaceIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedSpacesSpaceIdRoute,
+  } as any)
+const AuthenticatedSpacesSpaceIdFoldersFolderIdRoute =
+  AuthenticatedSpacesSpaceIdFoldersFolderIdRouteImport.update({
+    id: '/folders/$folderId',
+    path: '/folders/$folderId',
+    getParentRoute: () => AuthenticatedSpacesSpaceIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/login': typeof LoginRoute
-  '/spaces/$spaceId': typeof AuthenticatedSpacesSpaceIdRoute
+  '/spaces/$spaceId': typeof AuthenticatedSpacesSpaceIdRouteWithChildren
+  '/spaces/$spaceId/': typeof AuthenticatedSpacesSpaceIdIndexRoute
+  '/spaces/$spaceId/folders/$folderId': typeof AuthenticatedSpacesSpaceIdFoldersFolderIdRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/': typeof AuthenticatedIndexRoute
-  '/spaces/$spaceId': typeof AuthenticatedSpacesSpaceIdRoute
+  '/spaces/$spaceId': typeof AuthenticatedSpacesSpaceIdIndexRoute
+  '/spaces/$spaceId/folders/$folderId': typeof AuthenticatedSpacesSpaceIdFoldersFolderIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
-  '/_authenticated/spaces/$spaceId': typeof AuthenticatedSpacesSpaceIdRoute
+  '/_authenticated/spaces/$spaceId': typeof AuthenticatedSpacesSpaceIdRouteWithChildren
+  '/_authenticated/spaces/$spaceId/': typeof AuthenticatedSpacesSpaceIdIndexRoute
+  '/_authenticated/spaces/$spaceId/folders/$folderId': typeof AuthenticatedSpacesSpaceIdFoldersFolderIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/spaces/$spaceId'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/spaces/$spaceId'
+    | '/spaces/$spaceId/'
+    | '/spaces/$spaceId/folders/$folderId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/login' | '/' | '/spaces/$spaceId'
+  to: '/login' | '/' | '/spaces/$spaceId' | '/spaces/$spaceId/folders/$folderId'
   id:
     | '__root__'
     | '/_authenticated'
     | '/login'
     | '/_authenticated/'
     | '/_authenticated/spaces/$spaceId'
+    | '/_authenticated/spaces/$spaceId/'
+    | '/_authenticated/spaces/$spaceId/folders/$folderId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -100,17 +126,48 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSpacesSpaceIdRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/spaces/$spaceId/': {
+      id: '/_authenticated/spaces/$spaceId/'
+      path: '/'
+      fullPath: '/spaces/$spaceId/'
+      preLoaderRoute: typeof AuthenticatedSpacesSpaceIdIndexRouteImport
+      parentRoute: typeof AuthenticatedSpacesSpaceIdRoute
+    }
+    '/_authenticated/spaces/$spaceId/folders/$folderId': {
+      id: '/_authenticated/spaces/$spaceId/folders/$folderId'
+      path: '/folders/$folderId'
+      fullPath: '/spaces/$spaceId/folders/$folderId'
+      preLoaderRoute: typeof AuthenticatedSpacesSpaceIdFoldersFolderIdRouteImport
+      parentRoute: typeof AuthenticatedSpacesSpaceIdRoute
+    }
   }
 }
 
+interface AuthenticatedSpacesSpaceIdRouteChildren {
+  AuthenticatedSpacesSpaceIdIndexRoute: typeof AuthenticatedSpacesSpaceIdIndexRoute
+  AuthenticatedSpacesSpaceIdFoldersFolderIdRoute: typeof AuthenticatedSpacesSpaceIdFoldersFolderIdRoute
+}
+
+const AuthenticatedSpacesSpaceIdRouteChildren: AuthenticatedSpacesSpaceIdRouteChildren =
+  {
+    AuthenticatedSpacesSpaceIdIndexRoute: AuthenticatedSpacesSpaceIdIndexRoute,
+    AuthenticatedSpacesSpaceIdFoldersFolderIdRoute:
+      AuthenticatedSpacesSpaceIdFoldersFolderIdRoute,
+  }
+
+const AuthenticatedSpacesSpaceIdRouteWithChildren =
+  AuthenticatedSpacesSpaceIdRoute._addFileChildren(
+    AuthenticatedSpacesSpaceIdRouteChildren,
+  )
+
 interface AuthenticatedRouteChildren {
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
-  AuthenticatedSpacesSpaceIdRoute: typeof AuthenticatedSpacesSpaceIdRoute
+  AuthenticatedSpacesSpaceIdRoute: typeof AuthenticatedSpacesSpaceIdRouteWithChildren
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
-  AuthenticatedSpacesSpaceIdRoute: AuthenticatedSpacesSpaceIdRoute,
+  AuthenticatedSpacesSpaceIdRoute: AuthenticatedSpacesSpaceIdRouteWithChildren,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
