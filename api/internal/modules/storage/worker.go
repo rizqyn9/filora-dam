@@ -3,11 +3,15 @@ package storage
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 
 	"github.com/rizqyn9/filora-dam/api/internal/database/db"
 )
@@ -73,23 +77,37 @@ func (w *Worker) processNext(ctx context.Context) {
 }
 
 func (w *Worker) archiveAsset(ctx context.Context, assetID uuid.UUID) error {
+	ctx, span := otel.Tracer("filora-api").Start(ctx, "archive.sync_asset")
+	defer span.End()
+
+	span.SetAttributes(attribute.String("asset.id", assetID.String()))
+
 	// 1. Get the serving location
 	servingLoc, err := w.repo.GetServingLocation(ctx, assetID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "get serving location failed")
 		return fmt.Errorf("get serving location: %w", err)
 	}
 	if servingLoc.RemotePath == nil {
-		return fmt.Errorf("serving location has no remote path")
+		err := fmt.Errorf("serving location has no remote path")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	// 2. Get serving adapter and download the file
 	servingAdapter, err := w.registry.Get(ctx, servingLoc.AccountID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "get serving adapter failed")
 		return fmt.Errorf("get serving adapter: %w", err)
 	}
 
 	body, err := servingAdapter.Download(ctx, *servingLoc.RemotePath)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "download from serving failed")
 		return fmt.Errorf("download from serving: %w", err)
 	}
 	defer func() { _ = body.Close() }()
@@ -97,18 +115,26 @@ func (w *Worker) archiveAsset(ctx context.Context, assetID uuid.UUID) error {
 	// 3. Get the asset record for size info
 	asset, err := w.queries.GetAssetByID(ctx, assetID)
 	if err != nil {
+		span.RecordError(err)
 		return fmt.Errorf("get asset: %w", err)
 	}
 
 	// 4. Elect an archive account
 	archiveAccount, err := w.service.ElectAccount(ctx, db.StorageLayerArchive, asset.SizeBytes)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "elect archive account failed")
 		return fmt.Errorf("elect archive account: %w", err)
 	}
+	span.SetAttributes(
+		attribute.Int64("archive.account_id", archiveAccount.ID),
+		attribute.String("archive.provider", string(archiveAccount.Provider)),
+	)
 
 	// 5. Get archive adapter and upload
 	archiveAdapter, err := w.registry.Get(ctx, archiveAccount.ID)
 	if err != nil {
+		span.RecordError(err)
 		return fmt.Errorf("get archive adapter: %w", err)
 	}
 
@@ -120,13 +146,15 @@ func (w *Worker) archiveAsset(ctx context.Context, assetID uuid.UUID) error {
 		ContentType: asset.MimeType,
 	})
 	if err != nil {
-		// Record failed location
 		_, _ = w.repo.CreateLocation(ctx, db.CreateStorageLocationParams{
 			AssetID:   assetID,
 			AccountID: archiveAccount.ID,
 			Layer:     db.StorageLayerArchive,
 			Status:    db.LocationStatusFailed,
 		})
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "upload to archive failed")
+		slog.ErrorContext(ctx, "archive upload failed", "error", err, "asset_id", assetID, "account_id", archiveAccount.ID)
 		return fmt.Errorf("upload to archive: %w", err)
 	}
 
@@ -140,11 +168,17 @@ func (w *Worker) archiveAsset(ctx context.Context, assetID uuid.UUID) error {
 		RemoteUrl:  &result.RemoteURL,
 	})
 	if err != nil {
+		span.RecordError(err)
 		return fmt.Errorf("record archive location: %w", err)
 	}
 
-	// 7. Increment archive account usage
 	_ = w.repo.IncrementUsage(ctx, archiveAccount.ID, asset.SizeBytes)
+
+	slog.InfoContext(ctx, "asset archived",
+		"asset_id", assetID,
+		"archive_account_id", archiveAccount.ID,
+		"size_bytes", asset.SizeBytes,
+	)
 
 	return nil
 }

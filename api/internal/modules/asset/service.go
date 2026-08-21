@@ -8,12 +8,21 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/rizqyn9/filora-dam/api/internal/database/db"
+	"github.com/rizqyn9/filora-dam/api/internal/telemetry"
 )
+
+var tracer = otel.Tracer("filora-api")
 
 // StorageService is the interface this module needs from the storage module.
 type StorageService interface {
@@ -43,15 +52,17 @@ type Service struct {
 	uploader   Uploader
 	jobCreator JobCreator
 	quota      SpaceQuota
+	metrics    *telemetry.Metrics
 }
 
-func NewService(repo *Repository, storage StorageService, uploader Uploader, jobCreator JobCreator, quota SpaceQuota) *Service {
+func NewService(repo *Repository, storage StorageService, uploader Uploader, jobCreator JobCreator, quota SpaceQuota, metrics *telemetry.Metrics) *Service {
 	return &Service{
 		repo:       repo,
 		storage:    storage,
 		uploader:   uploader,
 		jobCreator: jobCreator,
 		quota:      quota,
+		metrics:    metrics,
 	}
 }
 
@@ -76,18 +87,26 @@ func (s *Service) ListAssets(ctx context.Context, params ListAssetsParams) ([]db
 	return s.repo.ListBySpaceRoot(ctx, params.SpaceID, params.Limit, params.Offset)
 }
 
-// Upload handles the full upload flow:
-// 1. Check space quota
-// 2. Hash the file for dedup check
-// 3. If hash exists → create reference only (no physical upload)
-// 4. If new → elect account, upload + record location, create asset + reference
-// 5. Increment space usage
-// 6. Enqueue archive job
+// Upload handles the full upload flow with observability.
 func (s *Service) Upload(ctx context.Context, userID int64, input UploadInput) (*db.Asset, error) {
+	ctx, span := tracer.Start(ctx, "asset.upload")
+	defer span.End()
+
+	start := time.Now()
+	span.SetAttributes(
+		attribute.String("asset.filename", input.Filename),
+		attribute.String("asset.content_type", input.ContentType),
+		attribute.Int64("asset.size_bytes", input.Size),
+		attribute.String("space.id", input.SpaceID.String()),
+	)
+
 	// Read body and compute hash
 	hasher := sha256.New()
 	content, err := io.ReadAll(io.TeeReader(input.Body, hasher))
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "read body failed")
+		slog.ErrorContext(ctx, "upload read body failed", "error", err)
 		return nil, fmt.Errorf("read upload body: %w", err)
 	}
 	checksum := hex.EncodeToString(hasher.Sum(nil))
@@ -95,27 +114,52 @@ func (s *Service) Upload(ctx context.Context, userID int64, input UploadInput) (
 
 	// Check space quota
 	if err := s.quota.CheckQuota(ctx, input.SpaceID, actualSize); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "quota exceeded")
+		slog.WarnContext(ctx, "upload quota exceeded", "space_id", input.SpaceID, "size", actualSize)
 		return nil, fmt.Errorf("quota exceeded: %w", err)
 	}
 
 	// Dedup check (global)
 	existing, err := s.repo.GetByChecksum(ctx, checksum)
 	if err == nil && existing != nil {
-		// Asset exists — just create a new reference (no physical upload needed)
+		span.SetAttributes(attribute.Bool("dedup.hit", true))
+
 		_, err = s.repo.CreateReference(ctx, existing.ID, input.SpaceID, input.FolderID)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "create reference failed")
 			return nil, fmt.Errorf("create reference for existing asset: %w", err)
 		}
-		// Still increment space usage (the space now references this data)
+
 		_ = s.quota.IncrementUsage(ctx, input.SpaceID, existing.SizeBytes)
+
+		slog.InfoContext(ctx, "asset dedup hit",
+			"asset_id", existing.ID,
+			"checksum", checksum,
+			"space_id", input.SpaceID,
+		)
+
+		s.metrics.UploadsTotal.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("mime_type", input.ContentType),
+			attribute.Bool("dedup_hit", true),
+		))
 		return existing, nil
 	}
+	span.SetAttributes(attribute.Bool("dedup.hit", false))
 
 	// Elect a serving account
 	account, err := s.storage.ElectAccount(ctx, db.StorageLayerServing, actualSize)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "elect account failed")
+		slog.ErrorContext(ctx, "elect storage account failed", "error", err, "layer", "serving")
 		return nil, fmt.Errorf("elect storage account: %w", err)
 	}
+	span.SetAttributes(
+		attribute.Int64("storage.account_id", account.ID),
+		attribute.String("storage.provider", string(account.Provider)),
+	)
 
 	// Generate storage key
 	assetID := uuid.New()
@@ -124,6 +168,9 @@ func (s *Service) Upload(ctx context.Context, userID int64, input UploadInput) (
 	// Upload to provider AND record storage_locations row
 	_, err = s.uploader.UploadAndRecord(ctx, assetID, account.ID, db.StorageLayerServing, key, bytes.NewReader(content), actualSize, input.ContentType)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "upload to storage failed")
+		slog.ErrorContext(ctx, "upload to storage failed", "error", err, "account_id", account.ID)
 		return nil, fmt.Errorf("upload to storage: %w", err)
 	}
 
@@ -137,24 +184,50 @@ func (s *Service) Upload(ctx context.Context, userID int64, input UploadInput) (
 		UploadedBy:       userID,
 	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "create asset record failed")
 		return nil, fmt.Errorf("create asset record: %w", err)
 	}
 
 	// Create reference
 	_, err = s.repo.CreateReference(ctx, asset.ID, input.SpaceID, input.FolderID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "create reference failed")
 		return nil, fmt.Errorf("create asset reference: %w", err)
 	}
 
 	// Increment space usage
 	_ = s.quota.IncrementUsage(ctx, input.SpaceID, actualSize)
 
-	// Enqueue archive job — log error if it fails, don't silently swallow
+	// Enqueue archive job
 	if err := s.jobCreator.CreateArchiveJob(ctx, asset.ID); err != nil {
-		// Return the asset (upload succeeded) but wrap the error for the caller to log
-		// The asset is usable, but not yet archived — this is a degraded state
+		span.AddEvent("archive_job_failed")
+		slog.WarnContext(ctx, "archive job creation failed", "error", err, "asset_id", asset.ID)
 		return asset, fmt.Errorf("asset uploaded but archive job failed: %w", err)
 	}
+
+	// --- Metrics + logs ---
+	duration := float64(time.Since(start).Milliseconds())
+	s.metrics.UploadsTotal.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("provider", string(account.Provider)),
+		attribute.String("mime_type", input.ContentType),
+		attribute.Bool("dedup_hit", false),
+	))
+	s.metrics.UploadsBytes.Add(ctx, actualSize, metric.WithAttributes(
+		attribute.String("provider", string(account.Provider)),
+	))
+	s.metrics.UploadsDuration.Record(ctx, duration, metric.WithAttributes(
+		attribute.String("provider", string(account.Provider)),
+	))
+
+	slog.InfoContext(ctx, "asset uploaded",
+		"asset_id", asset.ID,
+		"size_bytes", actualSize,
+		"provider", account.Provider,
+		"account_id", account.ID,
+		"duration_ms", duration,
+	)
 
 	return asset, nil
 }
@@ -167,7 +240,6 @@ func (s *Service) DeleteReference(ctx context.Context, refID int64, spaceID uuid
 	if err := s.repo.SoftDeleteReference(ctx, refID); err != nil {
 		return err
 	}
-	// Decrement space usage when a reference is removed
 	_ = s.quota.DecrementUsage(ctx, spaceID, sizeBytes)
 	return nil
 }

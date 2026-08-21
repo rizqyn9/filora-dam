@@ -9,235 +9,51 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as AppRouteImport } from './routes/_app'
-import { Route as AppIndexRouteImport } from './routes/_app/index'
-import { Route as AppTagsRouteImport } from './routes/_app/tags'
-import { Route as AppStorageRouteImport } from './routes/_app/storage'
-import { Route as AppGalleriesRouteImport } from './routes/_app/galleries'
-import { Route as AppAdminIndexRouteImport } from './routes/_app/admin/index'
-import { Route as AppAdminUsersRouteImport } from './routes/_app/admin/users'
-import { Route as AppAdminRolesRouteImport } from './routes/_app/admin/roles'
+import { Route as IndexRouteImport } from './routes/index'
 
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AppRoute = AppRouteImport.update({
-  id: '/_app',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AppIndexRoute = AppIndexRouteImport.update({
+const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppTagsRoute = AppTagsRouteImport.update({
-  id: '/tags',
-  path: '/tags',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppStorageRoute = AppStorageRouteImport.update({
-  id: '/storage',
-  path: '/storage',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppGalleriesRoute = AppGalleriesRouteImport.update({
-  id: '/galleries',
-  path: '/galleries',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppAdminIndexRoute = AppAdminIndexRouteImport.update({
-  id: '/admin/',
-  path: '/admin/',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
-  id: '/admin/users',
-  path: '/admin/users',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppAdminRolesRoute = AppAdminRolesRouteImport.update({
-  id: '/admin/roles',
-  path: '/admin/roles',
-  getParentRoute: () => AppRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof AppIndexRoute
-  '/login': typeof LoginRoute
-  '/galleries': typeof AppGalleriesRoute
-  '/storage': typeof AppStorageRoute
-  '/tags': typeof AppTagsRoute
-  '/admin/roles': typeof AppAdminRolesRoute
-  '/admin/users': typeof AppAdminUsersRoute
-  '/admin/': typeof AppAdminIndexRoute
+  '/': typeof IndexRoute
 }
 export interface FileRoutesByTo {
-  '/login': typeof LoginRoute
-  '/galleries': typeof AppGalleriesRoute
-  '/storage': typeof AppStorageRoute
-  '/tags': typeof AppTagsRoute
-  '/': typeof AppIndexRoute
-  '/admin/roles': typeof AppAdminRolesRoute
-  '/admin/users': typeof AppAdminUsersRoute
-  '/admin': typeof AppAdminIndexRoute
+  '/': typeof IndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/_app': typeof AppRouteWithChildren
-  '/login': typeof LoginRoute
-  '/_app/galleries': typeof AppGalleriesRoute
-  '/_app/storage': typeof AppStorageRoute
-  '/_app/tags': typeof AppTagsRoute
-  '/_app/': typeof AppIndexRoute
-  '/_app/admin/roles': typeof AppAdminRolesRoute
-  '/_app/admin/users': typeof AppAdminUsersRoute
-  '/_app/admin/': typeof AppAdminIndexRoute
+  '/': typeof IndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/login'
-    | '/galleries'
-    | '/storage'
-    | '/tags'
-    | '/admin/roles'
-    | '/admin/users'
-    | '/admin/'
+  fullPaths: '/'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/login'
-    | '/galleries'
-    | '/storage'
-    | '/tags'
-    | '/'
-    | '/admin/roles'
-    | '/admin/users'
-    | '/admin'
-  id:
-    | '__root__'
-    | '/_app'
-    | '/login'
-    | '/_app/galleries'
-    | '/_app/storage'
-    | '/_app/tags'
-    | '/_app/'
-    | '/_app/admin/roles'
-    | '/_app/admin/users'
-    | '/_app/admin/'
+  to: '/'
+  id: '__root__' | '/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  AppRoute: typeof AppRouteWithChildren
-  LoginRoute: typeof LoginRoute
+  IndexRoute: typeof IndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_app': {
-      id: '/_app'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AppRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_app/': {
-      id: '/_app/'
+    '/': {
+      id: '/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof AppIndexRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/tags': {
-      id: '/_app/tags'
-      path: '/tags'
-      fullPath: '/tags'
-      preLoaderRoute: typeof AppTagsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/storage': {
-      id: '/_app/storage'
-      path: '/storage'
-      fullPath: '/storage'
-      preLoaderRoute: typeof AppStorageRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/galleries': {
-      id: '/_app/galleries'
-      path: '/galleries'
-      fullPath: '/galleries'
-      preLoaderRoute: typeof AppGalleriesRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/admin/': {
-      id: '/_app/admin/'
-      path: '/admin'
-      fullPath: '/admin/'
-      preLoaderRoute: typeof AppAdminIndexRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/admin/users': {
-      id: '/_app/admin/users'
-      path: '/admin/users'
-      fullPath: '/admin/users'
-      preLoaderRoute: typeof AppAdminUsersRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/admin/roles': {
-      id: '/_app/admin/roles'
-      path: '/admin/roles'
-      fullPath: '/admin/roles'
-      preLoaderRoute: typeof AppAdminRolesRouteImport
-      parentRoute: typeof AppRoute
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }
 
-interface AppRouteChildren {
-  AppGalleriesRoute: typeof AppGalleriesRoute
-  AppStorageRoute: typeof AppStorageRoute
-  AppTagsRoute: typeof AppTagsRoute
-  AppIndexRoute: typeof AppIndexRoute
-  AppAdminRolesRoute: typeof AppAdminRolesRoute
-  AppAdminUsersRoute: typeof AppAdminUsersRoute
-  AppAdminIndexRoute: typeof AppAdminIndexRoute
-}
-
-const AppRouteChildren: AppRouteChildren = {
-  AppGalleriesRoute: AppGalleriesRoute,
-  AppStorageRoute: AppStorageRoute,
-  AppTagsRoute: AppTagsRoute,
-  AppIndexRoute: AppIndexRoute,
-  AppAdminRolesRoute: AppAdminRolesRoute,
-  AppAdminUsersRoute: AppAdminUsersRoute,
-  AppAdminIndexRoute: AppAdminIndexRoute,
-}
-
-const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
-
 const rootRouteChildren: RootRouteChildren = {
-  AppRoute: AppRouteWithChildren,
-  LoginRoute: LoginRoute,
+  IndexRoute: IndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

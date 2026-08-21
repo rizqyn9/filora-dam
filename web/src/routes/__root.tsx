@@ -6,12 +6,10 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useApplyTheme } from "@/hooks/use-theme";
 
-/** Router context — available in every route's loader / beforeLoad. */
 export interface RouterContext {
   queryClient: QueryClient;
 }
 
-// Devtools are dev-only and code-split out of the production bundle.
 const TanStackRouterDevtools = import.meta.env.PROD
   ? () => null
   : lazy(() =>
@@ -24,7 +22,7 @@ function RootLayout() {
   useApplyTheme();
 
   return (
-    <TooltipProvider delayDuration={200}>
+    <TooltipProvider>
       <Outlet />
       <Toaster />
       <Suspense>

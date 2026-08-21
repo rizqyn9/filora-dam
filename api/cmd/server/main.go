@@ -84,7 +84,8 @@ func main() {
 
 	// --- Auth ---
 	tokenCache := iauth.NewTokenCache()
-	authService := authmod.NewService(queries, tokenCache)
+	appMetrics := telemetry.NewMetrics()
+	authService := authmod.NewService(queries, tokenCache, appMetrics)
 	authHandler := authmod.NewHandler(authService)
 
 	// --- Modules ---
@@ -109,7 +110,7 @@ func main() {
 	archiveWorker := storage.NewWorker(queries, storageRepo, storageService, storageRegistry, logger)
 
 	assetRepo := asset.NewRepository(queries)
-	assetService := asset.NewService(assetRepo, storageService, storageUploader, archiveWorker, spaceService)
+	assetService := asset.NewService(assetRepo, storageService, storageUploader, archiveWorker, spaceService, appMetrics)
 	assetHandler := asset.NewHandler(assetService, spaceService, logger)
 
 	// --- Server ---

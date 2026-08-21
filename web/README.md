@@ -79,21 +79,10 @@ src/
 │   └── galleries/index.tsx   # "/galleries" (loader prefetches via Query)
 │
 ├── features/                 # feature slices — mirror the API modules
-│   ├── account/
-│   │   ├── schemas.ts        # Zod schemas + inferred types
-│   │   └── api.ts            # queryOptions + query/mutation hooks + keys
-│   └── galleries/
-│       ├── schemas.ts
-│       ├── api.ts
-│       └── components/       # feature-specific UI (e.g. table columns)
 │
 ├── components/
 │   ├── ui/                   # shadcn primitives (managed by the CLI)
 │   └── data-table.tsx        # reusable TanStack Table + shadcn wrapper
-│
-├── stores/                   # Zustand (client/UI state ONLY)
-│   ├── auth-store.ts         # token mirror + api-client auth bridge
-│   └── ui-store.ts           # theme, sidebar, selection
 │
 └── lib/                      # cross-cutting infrastructure
     ├── api-client.ts         # fetch wrapper: bearer token + response envelope
