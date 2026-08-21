@@ -13,3 +13,20 @@ export function useSpaces() {
     },
   });
 }
+
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+
+export function useCreateSpace() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (name: string) =>
+      api<Space>("/spaces", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      }).then((raw) => SpaceSchema.parse(raw)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["spaces"] });
+    },
+  });
+}
