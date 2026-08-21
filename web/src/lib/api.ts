@@ -20,8 +20,9 @@ export class ApiRequestError extends Error {
 /** Thin fetch wrapper that handles the standard Filora API response envelope. */
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const token = useAuthStore.getState().token;
-  // Public auth routes live at /auth/*, protected routes at /api/v1/*
-  const url = path.startsWith("/auth") ? path : `${BASE}${path}`;
+  // Only /auth/login and /auth/register are public (no /api/v1 prefix)
+  const isPublicAuth = path === "/auth/login" || path === "/auth/register";
+  const url = isPublicAuth ? path : `${BASE}${path}`;
 
   const res = await fetch(url, {
     ...init,

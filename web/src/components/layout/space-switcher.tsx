@@ -5,7 +5,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import { useSpaces } from "@/features/spaces/api";
 
@@ -25,6 +24,8 @@ export function SpaceSwitcher() {
   }
 
   const activeId = params.spaceId ?? spaces[0].id;
+  const activeName =
+    spaces.find((s) => s.id === activeId)?.name ?? "Select space";
 
   return (
     <div className="p-3">
@@ -35,7 +36,7 @@ export function SpaceSwitcher() {
         }}
       >
         <SelectTrigger className="w-full">
-          <SelectValue placeholder="Select space" />
+          <span className="truncate">{activeName}</span>
         </SelectTrigger>
         <SelectContent>
           {spaces.map((space) => (
