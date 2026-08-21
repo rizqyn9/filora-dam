@@ -1,14 +1,33 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Navigate } from "@tanstack/react-router";
+
+import { useSpaces } from "@/features/spaces/api";
 
 export const Route = createFileRoute("/_authenticated/")({
-  component: HomePage,
+  component: RedirectToFirstSpace,
 });
 
-function HomePage() {
-  // Ticket 04 will replace this with a redirect to the first space.
+function RedirectToFirstSpace() {
+  const { data: spaces, isLoading } = useSpaces();
+
+  if (isLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
+
+  if (spaces?.length) {
+    return (
+      <Navigate to="/spaces/$spaceId" params={{ spaceId: spaces[0].id }} />
+    );
+  }
+
   return (
     <div className="flex h-full items-center justify-center">
-      <p className="text-muted-foreground">Loading spaces...</p>
+      <p className="text-muted-foreground">
+        No spaces yet. Create one to get started.
+      </p>
     </div>
   );
 }

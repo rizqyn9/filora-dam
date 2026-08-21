@@ -9,16 +9,17 @@ import { useLogout, useMe } from "@/features/auth/api";
 import { getInitials } from "@/lib/utils";
 import { useUiStore } from "@/stores/ui-store";
 
+import { SpaceSwitcher } from "./space-switcher";
+
 function SidebarContent() {
   const { data: user } = useMe();
   const logout = useLogout();
 
   return (
     <div className="flex h-full flex-col">
-      {/* Space switcher placeholder — wired in ticket 04 */}
-      <div className="border-b p-4">
-        <p className="text-sm font-medium text-muted-foreground">Spaces</p>
-      </div>
+      {/* Space switcher */}
+      <SpaceSwitcher />
+      <Separator />
 
       {/* Folder tree placeholder — wired in ticket 05 */}
       <ScrollArea className="flex-1 p-2">
