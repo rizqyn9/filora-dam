@@ -46,8 +46,21 @@ type SpaceQuota interface {
 	DecrementUsage(ctx context.Context, spaceID uuid.UUID, bytes int64) error
 }
 
+// AssetRepository is the interface the service needs from its data layer.
+type AssetRepository interface {
+	GetByID(ctx context.Context, id uuid.UUID) (*db.Asset, error)
+	GetByChecksum(ctx context.Context, hash string) (*db.Asset, error)
+	Create(ctx context.Context, params db.CreateAssetParams) (*db.Asset, error)
+	CreateReference(ctx context.Context, assetID, spaceID uuid.UUID, folderID *uuid.UUID) (*db.AssetReference, error)
+	SoftDeleteReference(ctx context.Context, id int64) error
+	RestoreReference(ctx context.Context, id int64) error
+	ListByFolder(ctx context.Context, spaceID, folderID uuid.UUID, limit, offset int32) ([]db.Asset, error)
+	ListBySpaceRoot(ctx context.Context, spaceID uuid.UUID, limit, offset int32) ([]db.Asset, error)
+	UpdateName(ctx context.Context, id uuid.UUID, name string) error
+}
+
 type Service struct {
-	repo       *Repository
+	repo       AssetRepository
 	storage    StorageService
 	uploader   Uploader
 	jobCreator JobCreator
@@ -55,7 +68,7 @@ type Service struct {
 	metrics    *telemetry.Metrics
 }
 
-func NewService(repo *Repository, storage StorageService, uploader Uploader, jobCreator JobCreator, quota SpaceQuota, metrics *telemetry.Metrics) *Service {
+func NewService(repo AssetRepository, storage StorageService, uploader Uploader, jobCreator JobCreator, quota SpaceQuota, metrics *telemetry.Metrics) *Service {
 	return &Service{
 		repo:       repo,
 		storage:    storage,

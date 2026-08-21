@@ -11,11 +11,24 @@ import (
 	"github.com/rizqyn9/filora-dam/api/internal/database/db"
 )
 
-type Service struct {
-	repo *Repository
+// SpaceRepository is the interface the space service needs.
+type SpaceRepository interface {
+	GetByID(ctx context.Context, id uuid.UUID) (*db.Space, error)
+	ListByOwner(ctx context.Context, ownerID int64) ([]db.Space, error)
+	ListByMember(ctx context.Context, userID int64) ([]db.Space, error)
+	Create(ctx context.Context, params db.CreateSpaceParams) (*db.Space, error)
+	Update(ctx context.Context, params db.UpdateSpaceParams) (*db.Space, error)
+	Delete(ctx context.Context, id uuid.UUID) error
+	IncrementUsage(ctx context.Context, id uuid.UUID, bytes int64) error
+	DecrementUsage(ctx context.Context, id uuid.UUID, bytes int64) error
+	GetMember(ctx context.Context, spaceID uuid.UUID, userID int64) (*db.SpaceMember, error)
 }
 
-func NewService(repo *Repository) *Service {
+type Service struct {
+	repo SpaceRepository
+}
+
+func NewService(repo SpaceRepository) *Service {
 	return &Service{repo: repo}
 }
 

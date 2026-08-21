@@ -22,8 +22,11 @@ fmt:
 vet:
 	go vet ./...
 
+test:
+	go test ./...
+
 # Run all checks (use in CI or pre-commit)
-check: fmt vet lint build
+check: fmt vet lint test build
 	@echo "All checks passed."
 
 # --- Database ---
