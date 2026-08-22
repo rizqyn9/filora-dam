@@ -7,6 +7,8 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@google-cloud/local-auth": "^3.0.1",
+    "googleapis": "^176.0.0",
     "playwright": "^1.52.0",
     "yaml": "^2.7.0"
   },

@@ -1,15 +1,25 @@
-import { readFileSync, writeFileSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 
 export type Status =
-  | "pending"
-  | "registered"
-  | "verified"
-  | "onboarded"
-  | "keys_extracted"
-  | "failed";
+  | "CREATED"
+  | "REGISTRATION"
+  | "REGISTRATION_HUMAN_REQUIRED"
+  | "EMAIL_VERIFICATION_PENDING"
+  | "EMAIL_VERIFIED"
+  | "LOGIN"
+  | "LOGIN_HUMAN_REQUIRED"
+  | "AUTHENTICATED"
+  | "ONBOARDING_REQUIRED"
+  | "ONBOARDING_COMPLETED"
+  | "CONFIG_RETRIEVAL"
+  | "PRIVATE_KEY_OTP_PENDING"
+  | "PRIVATE_KEY_REVEALED"
+  | "COMPLETED"
+  | "FAILED";
 
 export interface Account {
+  id: string;
   email: string;
   status: Status;
   error?: string;
@@ -27,51 +37,84 @@ export interface Batch {
   accounts: Account[];
 }
 
+// --- Mutex for serialized writes ---
+
+let writeChain: Promise<void> = Promise.resolve();
+
+function serializedWrite(fn: () => void): Promise<void> {
+  writeChain = writeChain.then(fn, fn);
+  return writeChain;
+}
+
+// --- Batch operations ---
+
 export function newBatch(emails: string[]): Batch {
   const now = new Date().toISOString();
-  const ts = now.replace(/[-:T.]/g, "").slice(0, 14);
+  const ts = now.replace(/[-:T.Z]/g, "").slice(0, 14);
   return {
     id: `batch_${ts}`,
-    accounts: emails.map((email) => ({
+    accounts: emails.map((email, i) => ({
+      id: `A${String(i + 1).padStart(3, "0")}`,
       email,
-      status: "pending",
+      status: "CREATED",
       created_at: now,
       updated_at: now,
     })),
   };
 }
 
-export function advance(batch: Batch, idx: number, status: Status): void {
+export function transition(batch: Batch, idx: number, status: Status): Promise<void> {
   batch.accounts[idx].status = status;
   batch.accounts[idx].updated_at = new Date().toISOString();
+  // Error is cleared on forward transition
+  if (status !== "FAILED") {
+    batch.accounts[idx].error = undefined;
+  }
+  return serializedWrite(() => writeBatch(batch));
 }
 
-export function fail(batch: Batch, idx: number, err: string): void {
-  batch.accounts[idx].status = "failed";
-  batch.accounts[idx].error = err;
+export function fail(batch: Batch, idx: number, error: string): Promise<void> {
+  batch.accounts[idx].status = "FAILED";
+  batch.accounts[idx].error = error;
   batch.accounts[idx].updated_at = new Date().toISOString();
+  return serializedWrite(() => writeBatch(batch));
 }
 
-export function update(batch: Batch, idx: number, fields: Partial<Account>): void {
+export function update(batch: Batch, idx: number, fields: Partial<Account>): Promise<void> {
   Object.assign(batch.accounts[idx], fields);
   batch.accounts[idx].updated_at = new Date().toISOString();
+  return serializedWrite(() => writeBatch(batch));
 }
 
-export function indicesWithStatus(batch: Batch, status: Status): number[] {
-  return batch.accounts.map((a, i) => (a.status === status ? i : -1)).filter((i) => i >= 0);
+export function indicesWithStatus(batch: Batch, ...statuses: Status[]): number[] {
+  return batch.accounts
+    .map((a, i) => (statuses.includes(a.status) ? i : -1))
+    .filter((i) => i >= 0);
 }
 
-export function saveBatch(outputDir: string, batch: Batch): void {
-  mkdirSync(outputDir, { recursive: true });
-  const path = join(outputDir, `${batch.id}.json`);
-  writeFileSync(path, JSON.stringify(batch, null, 2), "utf-8");
+// --- Persistence ---
+
+let _outputDir = "output";
+
+export function setOutputDir(dir: string): void {
+  _outputDir = dir;
 }
 
-export function loadBatch(outputDir: string, batchId: string): Batch {
-  const path = join(outputDir, `${batchId}.json`);
+export function batchPath(batch: Batch): string {
+  return join(_outputDir, `${batch.id}.json`);
+}
+
+function writeBatch(batch: Batch): void {
+  mkdirSync(_outputDir, { recursive: true });
+  writeFileSync(join(_outputDir, `${batch.id}.json`), JSON.stringify(batch, null, 2), "utf-8");
+}
+
+export function saveBatch(batch: Batch): void {
+  writeBatch(batch);
+}
+
+export function loadBatch(batchId: string): Batch {
+  const path = join(_outputDir, `${batchId}.json`);
+  if (!existsSync(path)) throw new Error(`Batch not found: ${path}`);
   return JSON.parse(readFileSync(path, "utf-8"));
-}
-
-export function batchPath(outputDir: string, batch: Batch): string {
-  return join(outputDir, `${batch.id}.json`);
 }
