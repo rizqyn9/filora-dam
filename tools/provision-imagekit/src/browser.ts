@@ -1,10 +1,19 @@
 import { type BrowserContext, type Page } from "playwright";
 import type { Config } from "./config.js";
 import { regionCode } from "./config.js";
+import { randomDelay, humanType } from "./stealth.js";
 
 /**
  * All ImageKit interactions via real browser.
  */
+
+// --- Warm-up ---
+
+/** Visit homepage before target page to build browsing history / cookie reputation. */
+async function warmUp(page: Page): Promise<void> {
+  await page.goto("https://imagekit.io/", { waitUntil: "load", timeout: 60_000 });
+  await page.waitForTimeout(randomDelay(2000, 5000));
+}
 
 // --- Registration ---
 
@@ -20,17 +29,20 @@ export async function register(
   state: "email_pending" | "captcha" | "error";
   error?: string;
 }> {
+  await warmUp(page);
   await page.goto("https://imagekit.io/registration/", { waitUntil: "load", timeout: 120_000 });
   await page.waitForSelector('input[placeholder="Enter your work email"]', {
     state: "visible",
     timeout: 60_000,
   });
-  await page.waitForTimeout(5000);
+  await page.waitForTimeout(randomDelay(3000, 6000));
 
-  // Fill form
-  await page.locator('input[placeholder="Enter your work email"]').fill(email);
-  await page.locator('input[placeholder="Enter your name"]').fill(cfg.name);
-  await page.locator('input[placeholder="Enter a password"]').fill(cfg.password);
+  // Fill form with human-like typing
+  await humanType(page, 'input[placeholder="Enter your work email"]', email);
+  await page.waitForTimeout(randomDelay(500, 1500));
+  await humanType(page, 'input[placeholder="Enter your name"]', cfg.name);
+  await page.waitForTimeout(randomDelay(500, 1500));
+  await humanType(page, 'input[placeholder="Enter a password"]', cfg.password);
 
   // Uncheck marketing checkbox if checked
   const checkbox = page.locator('input[type="checkbox"]');
@@ -38,7 +50,7 @@ export async function register(
     await checkbox.uncheck();
   }
 
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(randomDelay(800, 2000));
 
   // Listen for /api/register response BEFORE clicking submit
   const responsePromise = page.waitForResponse(
@@ -125,16 +137,18 @@ export async function login(
   state: "authenticated" | "captcha" | "error";
   error?: string;
 }> {
+  await warmUp(page);
   await page.goto("https://imagekit.io/login/", { waitUntil: "load", timeout: 120_000 });
   await page.waitForSelector('input[placeholder="Enter your work email"]', {
     state: "visible",
     timeout: 60_000,
   });
-  await page.waitForTimeout(5000);
+  await page.waitForTimeout(randomDelay(3000, 6000));
 
-  await page.locator('input[placeholder="Enter your work email"]').fill(email);
-  await page.locator('input[placeholder="Enter a password"]').fill(cfg.password);
-  await page.waitForTimeout(500);
+  await humanType(page, 'input[placeholder="Enter your work email"]', email);
+  await page.waitForTimeout(randomDelay(500, 1500));
+  await humanType(page, 'input[placeholder="Enter a password"]', cfg.password);
+  await page.waitForTimeout(randomDelay(800, 2000));
 
   // Listen for /api/login response before clicking
   const responsePromise = page.waitForResponse(

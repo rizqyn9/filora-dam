@@ -13,6 +13,7 @@ import {
   type Batch,
 } from "./state.js";
 import { runAccount, type WorkerCallbacks } from "./worker.js";
+import { BROWSER_ARGS, CONTEXT_OPTIONS } from "./stealth.js";
 
 // @ts-ignore — gmail is JS
 import { authorize } from "./gmail/gmail.js";
@@ -23,6 +24,7 @@ const { positionals, values } = parseArgs({
     config: { type: "string", short: "c", default: "config.yaml" },
     output: { type: "string", short: "o", default: "output" },
     concurrency: { type: "string", default: "3" },
+    "spawn-delay": { type: "string", default: "10" },
   },
   allowPositionals: true,
 });
@@ -31,6 +33,7 @@ const command = positionals[0] ?? "run";
 const cfgPath = values.config!;
 const outputDir = values.output!;
 const concurrency = parseInt(values.concurrency!, 10) || 3;
+const spawnDelaySec = parseInt(values["spawn-delay"]!, 10) || 10;
 
 setOutputDir(outputDir);
 
@@ -102,10 +105,8 @@ async function main() {
   }
 
   console.log(`Accounts to process: ${pending.length}`);
-  console.log("Launching browser...\n");
-
-  const browser = await chromium.launch({ headless: false });
-  const context = await browser.newContext();
+  console.log(`Concurrency: ${concurrency} | Spawn delay: ${spawnDelaySec}s`);
+  console.log("Launching workers with separate persistent contexts...\n");
 
   // Readline for human intervention prompts
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -124,25 +125,47 @@ async function main() {
     },
   };
 
+  // Each worker gets its own persistent context for cookie/fingerprint reputation
+  const workerContexts: Awaited<ReturnType<typeof chromium.launchPersistentContext>>[] = [];
+
+  async function launchWorkerContext(workerIdx: number) {
+    const userDataDir = `${outputDir}/.browser-data/worker-${workerIdx}`;
+    const ctx = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      args: BROWSER_ARGS,
+      ...CONTEXT_OPTIONS,
+    });
+    workerContexts.push(ctx);
+    return ctx;
+  }
+
   // Worker pool: run up to `concurrency` accounts simultaneously
   const queue = [...pending];
   const running: Promise<void>[] = [];
+  let workerCounter = 0;
 
-  function spawnNext(): void {
+  async function spawnNext(): Promise<void> {
     if (queue.length === 0) return;
     const idx = queue.shift()!;
-    const p = runAccount(context, cfg, batch, idx, callbacks).then(() => {
-      // Remove from running, spawn next
+    const wIdx = workerCounter++;
+    const ctx = await launchWorkerContext(wIdx);
+    const p = runAccount(ctx, cfg, batch, idx, callbacks).then(async () => {
+      await ctx.close().catch(() => {});
       const i = running.indexOf(p);
       if (i >= 0) running.splice(i, 1);
+      // ponytail: rate-limit between spawns to avoid burst detection
+      await sleep(spawnDelaySec * 1000 + Math.random() * 5000);
       spawnNext();
     });
     running.push(p);
   }
 
-  // Seed the pool
+  // Seed the pool with staggered starts
   for (let i = 0; i < Math.min(concurrency, queue.length); i++) {
-    spawnNext();
+    await spawnNext();
+    if (i < Math.min(concurrency, queue.length) - 1) {
+      await sleep(spawnDelaySec * 1000 + Math.random() * 3000);
+    }
   }
 
   // Wait for all to finish
@@ -151,8 +174,6 @@ async function main() {
   }
 
   rl.close();
-  await context.close();
-  await browser.close();
 
   printSummary(batch);
 }
@@ -182,6 +203,10 @@ function printSummary(batch: Batch) {
 
 function ts(): string {
   return new Date().toISOString().slice(11, 19);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 main().catch((err) => {

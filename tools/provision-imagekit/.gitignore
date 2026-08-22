@@ -3,3 +3,4 @@ output/
 config.yaml
 token.json
 credentials.json
+.browser-data/
