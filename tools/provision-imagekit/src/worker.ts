@@ -45,13 +45,35 @@ export async function runAccount(
       log("resume — logging in first...");
       const loginResult = await browser.login(page, cfg, email);
       if (loginResult.state === "captcha") {
-        log("LOGIN CAPTCHA on resume — solve in browser");
-        const successPromise = browser.listenForLoginSuccess(page);
-        await cb.onHumanRequired(id, email, "login captcha (resume)");
-        const afterHuman = await successPromise;
-        if (afterHuman.state !== "authenticated") {
-          await fail(batch, idx, afterHuman.error ?? "Login failed on resume");
-          return;
+        if (cfg.capsolver_api_key) {
+          log("LOGIN CAPTCHA on resume — auto-solving...");
+          const solveResult = await browser.autoSolveTurnstile(
+            page,
+            cfg.capsolver_api_key,
+            "/api/login",
+          );
+          if (solveResult.state !== "solved") {
+            log(`auto-solve failed: ${solveResult.error} — falling back to human`);
+            const successPromise = browser.listenForLoginSuccess(page);
+            await cb.onHumanRequired(id, email, "login captcha (resume, auto-solve failed)");
+            const afterHuman = await successPromise;
+            if (afterHuman.state !== "authenticated") {
+              await fail(batch, idx, afterHuman.error ?? "Login failed on resume");
+              return;
+            }
+          }
+          await page
+            .waitForURL((url) => url.pathname.includes("/dashboard"), { timeout: 30_000 })
+            .catch(() => {});
+        } else {
+          log("LOGIN CAPTCHA on resume — solve in browser");
+          const successPromise = browser.listenForLoginSuccess(page);
+          await cb.onHumanRequired(id, email, "login captcha (resume)");
+          const afterHuman = await successPromise;
+          if (afterHuman.state !== "authenticated") {
+            await fail(batch, idx, afterHuman.error ?? "Login failed on resume");
+            return;
+          }
         }
       } else if (loginResult.state === "error") {
         await fail(batch, idx, loginResult.error ?? "Login failed on resume");
@@ -71,18 +93,55 @@ export async function runAccount(
       );
 
       if (regResult.state === "captcha") {
-        await transition(batch, idx, "REGISTRATION_HUMAN_REQUIRED");
-        log("→ REGISTRATION_HUMAN_REQUIRED");
-        const successPromise = browser.listenForRegistrationSuccess(page);
-        await cb.onHumanRequired(id, email, "registration captcha");
-        log("human resolved, waiting for register response...");
-        const afterHuman = await successPromise;
-        log(
-          `post-captcha result: state=${afterHuman.state}${afterHuman.error ? ` error=${afterHuman.error}` : ""}`,
-        );
-        if (afterHuman.state !== "email_pending") {
-          await fail(batch, idx, afterHuman.error ?? "Registration failed after captcha");
-          return;
+        // Try auto-solve via CapSolver if API key configured
+        if (cfg.capsolver_api_key) {
+          log("captcha detected — attempting auto-solve via CapSolver...");
+          const solveResult = await browser.autoSolveTurnstile(
+            page,
+            cfg.capsolver_api_key,
+            "/api/register",
+          );
+          log(
+            `auto-solve result: state=${solveResult.state}${solveResult.error ? ` error=${solveResult.error}` : ""}`,
+          );
+          if (solveResult.state === "solved") {
+            await transition(batch, idx, "EMAIL_VERIFICATION_PENDING");
+            log("→ EMAIL_VERIFICATION_PENDING (auto-solved)");
+          } else {
+            // Auto-solve failed — fall back to human
+            log(`auto-solve failed, falling back to human: ${solveResult.error}`);
+            await transition(batch, idx, "REGISTRATION_HUMAN_REQUIRED");
+            const successPromise = browser.listenForRegistrationSuccess(page);
+            await cb.onHumanRequired(
+              id,
+              email,
+              `registration captcha (auto-solve failed: ${solveResult.error})`,
+            );
+            log("human resolved, waiting for register response...");
+            const afterHuman = await successPromise;
+            log(
+              `post-captcha result: state=${afterHuman.state}${afterHuman.error ? ` error=${afterHuman.error}` : ""}`,
+            );
+            if (afterHuman.state !== "email_pending") {
+              await fail(batch, idx, afterHuman.error ?? "Registration failed after captcha");
+              return;
+            }
+          }
+        } else {
+          // No API key — manual human solve
+          await transition(batch, idx, "REGISTRATION_HUMAN_REQUIRED");
+          log("→ REGISTRATION_HUMAN_REQUIRED");
+          const successPromise = browser.listenForRegistrationSuccess(page);
+          await cb.onHumanRequired(id, email, "registration captcha");
+          log("human resolved, waiting for register response...");
+          const afterHuman = await successPromise;
+          log(
+            `post-captcha result: state=${afterHuman.state}${afterHuman.error ? ` error=${afterHuman.error}` : ""}`,
+          );
+          if (afterHuman.state !== "email_pending") {
+            await fail(batch, idx, afterHuman.error ?? "Registration failed after captcha");
+            return;
+          }
         }
       } else if (regResult.state === "error") {
         await fail(batch, idx, regResult.error ?? "Registration failed");
@@ -128,18 +187,49 @@ export async function runAccount(
       );
 
       if (loginResult.state === "captcha") {
-        await transition(batch, idx, "LOGIN_HUMAN_REQUIRED");
-        log("→ LOGIN_HUMAN_REQUIRED");
-        const successPromise = browser.listenForLoginSuccess(page);
-        await cb.onHumanRequired(id, email, "login captcha");
-        log("human resolved, waiting for login response...");
-        const afterHuman = await successPromise;
-        log(
-          `post-login-captcha: state=${afterHuman.state}${afterHuman.error ? ` error=${afterHuman.error}` : ""}`,
-        );
-        if (afterHuman.state !== "authenticated") {
-          await fail(batch, idx, afterHuman.error ?? "Login failed after captcha");
-          return;
+        if (cfg.capsolver_api_key) {
+          log("login captcha detected — attempting auto-solve via CapSolver...");
+          const solveResult = await browser.autoSolveTurnstile(
+            page,
+            cfg.capsolver_api_key,
+            "/api/login",
+          );
+          log(
+            `auto-solve result: state=${solveResult.state}${solveResult.error ? ` error=${solveResult.error}` : ""}`,
+          );
+          if (solveResult.state !== "solved") {
+            log(`auto-solve failed, falling back to human: ${solveResult.error}`);
+            await transition(batch, idx, "LOGIN_HUMAN_REQUIRED");
+            const successPromise = browser.listenForLoginSuccess(page);
+            await cb.onHumanRequired(
+              id,
+              email,
+              `login captcha (auto-solve failed: ${solveResult.error})`,
+            );
+            const afterHuman = await successPromise;
+            if (afterHuman.state !== "authenticated") {
+              await fail(batch, idx, afterHuman.error ?? "Login failed after captcha");
+              return;
+            }
+          }
+          // If solved, wait for dashboard redirect
+          await page
+            .waitForURL((url) => url.pathname.includes("/dashboard"), { timeout: 30_000 })
+            .catch(() => {});
+        } else {
+          await transition(batch, idx, "LOGIN_HUMAN_REQUIRED");
+          log("→ LOGIN_HUMAN_REQUIRED");
+          const successPromise = browser.listenForLoginSuccess(page);
+          await cb.onHumanRequired(id, email, "login captcha");
+          log("human resolved, waiting for login response...");
+          const afterHuman = await successPromise;
+          log(
+            `post-login-captcha: state=${afterHuman.state}${afterHuman.error ? ` error=${afterHuman.error}` : ""}`,
+          );
+          if (afterHuman.state !== "authenticated") {
+            await fail(batch, idx, afterHuman.error ?? "Login failed after captcha");
+            return;
+          }
         }
       } else if (loginResult.state === "error") {
         await fail(batch, idx, loginResult.error ?? "Login failed");

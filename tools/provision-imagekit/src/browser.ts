@@ -2,6 +2,7 @@ import { type BrowserContext, type Page } from "playwright";
 import type { Config } from "./config.js";
 import { regionCode } from "./config.js";
 import { randomDelay, humanType } from "./stealth.js";
+import { solveTurnstile } from "./captcha.js";
 
 /**
  * All ImageKit interactions via real browser.
@@ -13,6 +14,105 @@ import { randomDelay, humanType } from "./stealth.js";
 async function warmUp(page: Page): Promise<void> {
   await page.goto("https://imagekit.io/", { waitUntil: "load", timeout: 60_000 });
   await page.waitForTimeout(randomDelay(2000, 5000));
+}
+
+// --- Turnstile Auto-Solve ---
+
+/**
+ * Extract the Turnstile sitekey from the page, solve via CapSolver,
+ * inject the token, and re-submit the form.
+ * Returns the /api/register (or /api/login) response after re-submission.
+ */
+export async function autoSolveTurnstile(
+  page: Page,
+  apiKey: string,
+  apiEndpoint: string,
+): Promise<{ state: "solved" | "error"; error?: string }> {
+  // Extract sitekey from Turnstile iframe or script on page
+  const sitekey = await page.evaluate(() => {
+    // Method 1: data-sitekey attribute on turnstile div
+    const widget = document.querySelector("[data-sitekey]");
+    if (widget) return widget.getAttribute("data-sitekey");
+    // Method 2: cf-turnstile div
+    const cfWidget = document.querySelector(".cf-turnstile");
+    if (cfWidget) return cfWidget.getAttribute("data-sitekey");
+    // Method 3: iframe src contains sitekey param
+    const iframe = document.querySelector('iframe[src*="turnstile"]') as HTMLIFrameElement | null;
+    if (iframe) {
+      const url = new URL(iframe.src);
+      return url.searchParams.get("k") || url.searchParams.get("sitekey");
+    }
+    // Method 4: search script tags for render() call
+    for (const script of document.querySelectorAll("script")) {
+      const match = script.textContent?.match(/sitekey['":\s]+['"]([0-9x_A-Za-z-]+)['"]/);
+      if (match) return match[1];
+    }
+    return null;
+  });
+
+  if (!sitekey) {
+    return { state: "error", error: "Could not extract Turnstile sitekey from page" };
+  }
+
+  // Solve via CapSolver
+  const result = await solveTurnstile(apiKey, page.url(), sitekey);
+  if (!result.success || !result.token) {
+    return { state: "error", error: result.error ?? "Solver returned no token" };
+  }
+
+  // Inject token into page — Turnstile stores it in a hidden input or callback
+  await page.evaluate((token) => {
+    // Set hidden input value (standard Turnstile integration)
+    const input = document.querySelector(
+      'input[name="cf-turnstile-response"], input[name="g-recaptcha-response"]',
+    ) as HTMLInputElement | null;
+    if (input) {
+      input.value = token;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    // Also try the turnstile callback if exposed on window
+    const win = window as any;
+    if (typeof win.turnstileCallback === "function") {
+      win.turnstileCallback(token);
+    }
+    // Try setting on the cf-turnstile widget's response property
+    const widget = document.querySelector(".cf-turnstile") as any;
+    if (widget) {
+      widget.dataset.response = token;
+    }
+  }, result.token);
+
+  await page.waitForTimeout(randomDelay(500, 1000));
+
+  // Listen for the API response after re-submitting
+  const responsePromise = page.waitForResponse(
+    (res) => res.url().includes(apiEndpoint) && !res.url().includes("csrf"),
+    { timeout: 60_000 },
+  );
+
+  // Re-click submit
+  await page.getByRole("button", { name: "Submit" }).click();
+
+  try {
+    const res = await responsePromise;
+    const body = await res.json().catch(() => null);
+
+    if (body?.success) return { state: "solved" };
+    if (body?.isCaptchaRequired) {
+      return { state: "error", error: "Still captcha-required after token injection" };
+    }
+    if (body?.error || body?.email) {
+      return { state: "error", error: body.email || body.error };
+    }
+    return { state: "solved" };
+  } catch {
+    // Check if page navigated (success)
+    const url = page.url();
+    if (url.includes("verify=true") || url.includes("/login") || url.includes("/dashboard")) {
+      return { state: "solved" };
+    }
+    return { state: "error", error: `No API response after token inject. URL: ${url}` };
+  }
 }
 
 // --- Registration ---

@@ -7,6 +7,7 @@ export interface Config {
   name: string;
   batch_size: number;
   region: string;
+  capsolver_api_key?: string;
 }
 
 export function loadConfig(path: string): Config {
@@ -14,8 +15,7 @@ export function loadConfig(path: string): Config {
   const cfg = parse(raw) as Config;
 
   if (!cfg.email_domain) throw new Error("email_domain required");
-  if (!cfg.password || cfg.password.length < 8)
-    throw new Error("password required (min 8 chars)");
+  if (!cfg.password || cfg.password.length < 8) throw new Error("password required (min 8 chars)");
   if (!cfg.name) throw new Error("name required");
   cfg.batch_size = cfg.batch_size || 1;
   cfg.region = cfg.region || "Singapore";
