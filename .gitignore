@@ -1,10 +1,4 @@
 .ignore
 .scratch
 .DS_Store
-
-# --- ltm-power ---
-ltm/store/*.jsonl
-ltm/runtime/*
-ltm/reports/*
-ltm/snapshots/*
-# --- /ltm-power ---
+.playwright-mcp

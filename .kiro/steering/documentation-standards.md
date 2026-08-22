@@ -1,6 +1,5 @@
 ---
-inclusion: fileMatch
-fileMatchPattern: ['**/*.md', 'docs/**/*']
+inclusion: manual
 ---
 
 # Documentation Standards

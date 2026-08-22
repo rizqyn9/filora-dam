@@ -1,3 +1,32 @@
 {
-  "mcpServers": {}
+  "mcpServers": {
+    "context7": {
+      "disabled": true,
+      "url": "https://mcp.context7.com/mcp"
+    },
+    "memory": {
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ],
+      "autoApprove": [],
+      "command": "npx",
+      "disabled": true
+    },
+    "codebase-memory-mcp": {
+      "command": "/Users/rizqynugroho9/.local/bin/codebase-memory-mcp"
+    },
+    "neon": {
+      "url": "https://mcp.neon.tech/mcp",
+      "disabled": false
+    },
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest"
+      ],
+      "disabled": false
+    }
+  }
 }

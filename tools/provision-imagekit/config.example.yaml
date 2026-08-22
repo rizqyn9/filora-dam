@@ -1,0 +1,17 @@
+# ImageKit provisioning tool configuration
+
+# Email domain for generating accounts (Cloudflare catch-all)
+email_domain: "img.yourdomain.com"
+
+# Password used for all ImageKit accounts
+# Must meet: 8-100 chars, 1 lowercase, 1 uppercase, 1 digit
+password: "MyStr0ngPass!"
+
+# Name used for registration
+name: "Filora Storage"
+
+# How many accounts to provision in this run
+batch_size: 5
+
+# Storage region (as shown in ImageKit dropdown)
+region: "Singapore (Singapore)"
