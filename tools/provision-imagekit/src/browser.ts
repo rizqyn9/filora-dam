@@ -4,15 +4,30 @@ import { regionCode } from "./config.js";
 
 /**
  * All ImageKit interactions via real browser.
- * Each function takes a Page (owned by the worker's browser context).
  */
 
 // --- Registration ---
 
-export async function register(page: Page, cfg: Config, email: string): Promise<void> {
-  await page.goto("https://imagekit.io/registration/", { waitUntil: "commit" });
-  await page.waitForSelector('input[placeholder="Enter your work email"]', { state: "visible", timeout: 60_000 });
+/**
+ * Fill and submit registration form.
+ * Returns the result by intercepting the /api/register response.
+ */
+export async function register(
+  page: Page,
+  cfg: Config,
+  email: string,
+): Promise<{
+  state: "email_pending" | "captcha" | "error";
+  error?: string;
+}> {
+  await page.goto("https://imagekit.io/registration/", { waitUntil: "load", timeout: 120_000 });
+  await page.waitForSelector('input[placeholder="Enter your work email"]', {
+    state: "visible",
+    timeout: 60_000,
+  });
+  await page.waitForTimeout(5000);
 
+  // Fill form
   await page.locator('input[placeholder="Enter your work email"]').fill(email);
   await page.locator('input[placeholder="Enter your name"]').fill(cfg.name);
   await page.locator('input[placeholder="Enter a password"]').fill(cfg.password);
@@ -23,122 +38,199 @@ export async function register(page: Page, cfg: Config, email: string): Promise<
     await checkbox.uncheck();
   }
 
+  await page.waitForTimeout(500);
+
+  // Listen for /api/register response BEFORE clicking submit
+  const responsePromise = page.waitForResponse(
+    (res) => res.url().includes("/api/register") && !res.url().includes("csrf"),
+    { timeout: 60_000 },
+  );
+
   // Click submit
   await page.getByRole("button", { name: "Submit" }).click();
+
+  // Wait for the API response
+  try {
+    const res = await responsePromise;
+    const body = await res.json().catch(() => null);
+
+    if (!body) {
+      return { state: "error", error: `Non-JSON response (${res.status()})` };
+    }
+
+    // Captcha required — first attempt without captcha was rejected
+    if (body.isCaptchaRequired) {
+      return { state: "captcha" };
+    }
+
+    // Success
+    if (body.success) {
+      return { state: "email_pending" };
+    }
+
+    // Error (e.g. email exists)
+    return { state: "error", error: body.email || body.error || JSON.stringify(body) };
+  } catch {
+    // Timeout waiting for response — check page state
+    const url = page.url();
+    if (url.includes("verify=true") || url.includes("/login")) {
+      return { state: "email_pending" };
+    }
+    return { state: "error", error: `No /api/register response. URL: ${url}` };
+  }
 }
 
 /**
- * Detect registration outcome after submit.
- * Returns: "email_pending" | "captcha" | "error"
+ * After captcha is solved by human, wait for the second /api/register response.
+ * NOTE: Call this BEFORE prompting the human — it sets up the listener.
  */
-export async function detectRegistrationState(page: Page): Promise<{
-  state: "email_pending" | "captcha" | "error";
+export function listenForRegistrationSuccess(page: Page): Promise<{
+  state: "email_pending" | "error";
   error?: string;
 }> {
-  // Wait for either: redirect to verify page, captcha appearance, or error message
-  try {
-    await page.waitForFunction(
-      () => {
-        const url = window.location.href;
-        // Success: redirected away from registration or shows verify message
-        if (url.includes("verify=true") || url.includes("/login")) return true;
-        // Check for visible captcha iframe
-        if (document.querySelector('iframe[src*="captcha"], iframe[src*="turnstile"], iframe[src*="recaptcha"]')) return true;
-        // Check for error text
-        if (document.body.innerText.includes("captcha")) return true;
-        if (document.body.innerText.includes("verify")) return true;
-        return false;
+  return page
+    .waitForResponse(
+      (r) => {
+        if (!r.url().includes("/api/register") || r.url().includes("csrf")) return false;
+        // Only match successful responses (ignore the captcha-required ones)
+        return r.status() === 200;
       },
-      { timeout: 15_000 },
-    );
-  } catch {
-    // Timeout — check current state manually
-  }
-
-  const url = page.url();
-
-  // Redirected to login with verify=true → email verification pending
-  if (url.includes("verify=true") || url.includes("/login")) {
-    return { state: "email_pending" };
-  }
-
-  // Still on registration page — check for captcha or error
-  const bodyText = await page.locator("body").innerText();
-  if (bodyText.includes("captcha") || bodyText.includes("Captcha")) {
-    return { state: "captcha" };
-  }
-
-  // Check if page shows success/verify message
-  if (bodyText.includes("verify") || bodyText.includes("Verify")) {
-    return { state: "email_pending" };
-  }
-
-  return { state: "error", error: `Unexpected state at: ${url}` };
+      { timeout: 180_000 },
+    )
+    .then(async (res) => {
+      const body = await res.json().catch(() => null);
+      if (body?.success) return { state: "email_pending" as const };
+      if (body?.isCaptchaRequired) return { state: "error" as const, error: "Still needs captcha" };
+      return { state: "error" as const, error: body?.email || JSON.stringify(body) };
+    })
+    .catch(() => {
+      const url = page.url();
+      if (url.includes("verify=true") || url.includes("/login")) {
+        return { state: "email_pending" as const };
+      }
+      return {
+        state: "error" as const,
+        error: `Timeout waiting for register after captcha. URL: ${url}`,
+      };
+    });
 }
 
 // --- Login ---
 
-export async function login(page: Page, cfg: Config, email: string): Promise<void> {
-  await page.goto("https://imagekit.io/login/", { waitUntil: "commit" });
-  await page.waitForSelector('input[placeholder="Enter your work email"]', { state: "visible", timeout: 60_000 });
+export async function login(
+  page: Page,
+  cfg: Config,
+  email: string,
+): Promise<{
+  state: "authenticated" | "captcha" | "error";
+  error?: string;
+}> {
+  await page.goto("https://imagekit.io/login/", { waitUntil: "load", timeout: 120_000 });
+  await page.waitForSelector('input[placeholder="Enter your work email"]', {
+    state: "visible",
+    timeout: 60_000,
+  });
+  await page.waitForTimeout(5000);
 
   await page.locator('input[placeholder="Enter your work email"]').fill(email);
   await page.locator('input[placeholder="Enter a password"]').fill(cfg.password);
+  await page.waitForTimeout(500);
+
+  // Listen for /api/login response before clicking
+  const responsePromise = page.waitForResponse(
+    (res) => res.url().includes("/api/login") && !res.url().includes("csrf"),
+    { timeout: 60_000 },
+  );
+
   await page.getByRole("button", { name: "Submit" }).click();
+
+  try {
+    const res = await responsePromise;
+    const body = await res.json().catch(() => null);
+
+    if (body?.isCaptchaRequired) {
+      return { state: "captcha" };
+    }
+
+    if (res.status() >= 400 || body?.error) {
+      return { state: "error", error: body?.error || `status ${res.status()}` };
+    }
+
+    // Wait for redirect to dashboard
+    await page
+      .waitForURL((url) => url.pathname.includes("/dashboard"), { timeout: 30_000 })
+      .catch(() => {});
+    return { state: "authenticated" };
+  } catch {
+    // Check if we landed on dashboard anyway
+    if (page.url().includes("/dashboard")) {
+      return { state: "authenticated" };
+    }
+    // Check for captcha on page (no API call was made — captcha blocked client-side)
+    const hasIframe = await page
+      .locator('iframe[src*="captcha"], iframe[src*="turnstile"], iframe[src*="challenge"]')
+      .count();
+    if (hasIframe > 0) {
+      return { state: "captcha" };
+    }
+    return { state: "error", error: `Login stuck at: ${page.url()}` };
+  }
 }
 
-/**
- * Detect login outcome.
- * Returns: "authenticated" | "captcha" | "error"
- */
 export async function detectLoginState(page: Page): Promise<{
   state: "authenticated" | "captcha" | "error";
   error?: string;
 }> {
   try {
-    await page.waitForFunction(
-      () => {
-        const url = window.location.href;
-        if (url.includes("/dashboard")) return true;
-        if (document.body.innerText.includes("captcha") || document.body.innerText.includes("Captcha")) return true;
-        return false;
-      },
-      { timeout: 15_000 },
-    );
-  } catch {
-    // Timeout
-  }
-
-  const url = page.url();
-  if (url.includes("/dashboard")) {
+    await page.waitForURL((url) => url.pathname.includes("/dashboard"), { timeout: 30_000 });
     return { state: "authenticated" };
+  } catch {
+    const bodyText = await page.locator("body").innerText();
+    if (bodyText.includes("captcha") || bodyText.includes("Captcha")) {
+      return { state: "captcha" };
+    }
+    return { state: "error", error: `Login stuck at: ${page.url()}` };
   }
+}
 
-  const bodyText = await page.locator("body").innerText();
-  if (bodyText.includes("captcha") || bodyText.includes("Captcha")) {
-    return { state: "captcha" };
-  }
-
-  return { state: "error", error: `Login stuck at: ${url}` };
+/**
+ * After login captcha is solved by human, wait for the successful /api/login response.
+ * Call BEFORE prompting the human so the listener is active when they submit.
+ */
+export function listenForLoginSuccess(page: Page): Promise<{
+  state: "authenticated" | "error";
+  error?: string;
+}> {
+  return page
+    .waitForResponse(
+      (r) => {
+        if (!r.url().includes("/api/login") || r.url().includes("csrf")) return false;
+        return r.status() === 200;
+      },
+      { timeout: 180_000 },
+    )
+    .then(async () => {
+      await page
+        .waitForURL((url) => url.pathname.includes("/dashboard"), { timeout: 30_000 })
+        .catch(() => {});
+      if (page.url().includes("/dashboard")) return { state: "authenticated" as const };
+      return { state: "error" as const, error: "Login OK but no dashboard redirect" };
+    })
+    .catch(() => {
+      if (page.url().includes("/dashboard")) return { state: "authenticated" as const };
+      return { state: "error" as const, error: `Timeout after login captcha. URL: ${page.url()}` };
+    });
 }
 
 // --- Onboarding ---
 
-/**
- * Check if onboarding is required by inspecting current URL.
- */
 export async function checkOnboardingState(page: Page): Promise<"required" | "completed"> {
-  // Navigate to dashboard and see where we end up
   await page.goto("https://imagekit.io/dashboard", { waitUntil: "commit" });
   await page.waitForTimeout(3000);
-
-  const url = page.url();
-  if (url.includes("get-started")) return "required";
-  return "completed";
+  return page.url().includes("get-started") ? "required" : "completed";
 }
 
 export async function completeOnboarding(page: Page, cfg: Config): Promise<void> {
-  // Ensure we're on get-started
   if (!page.url().includes("get-started")) {
     await page.goto("https://imagekit.io/dashboard/get-started", { waitUntil: "commit" });
   }
@@ -160,7 +252,6 @@ export async function completeOnboarding(page: Page, cfg: Config): Promise<void>
   await page.getByText("Google / Bing").click();
   await page.getByRole("button", { name: "Submit" }).click();
 
-  // Wait for redirect to dashboard
   await page.waitForURL((url) => !url.pathname.includes("get-started"), { timeout: 30_000 });
 }
 
@@ -179,35 +270,79 @@ export async function navigateToApiKeys(page: Page): Promise<void> {
 
 export async function extractPublicKeys(page: Page): Promise<ExtractedKeys> {
   const publicKey = await page.locator('input[value^="public_"]').inputValue();
-
-  // Extract URL endpoint from page text
-  const endpointText = await page.locator("text=https://ik.imagekit.io/").first().textContent() ?? "";
+  const endpointText =
+    (await page.locator("text=https://ik.imagekit.io/").first().textContent()) ?? "";
   const match = endpointText.match(/https:\/\/ik\.imagekit\.io\/\S+/);
   const urlEndpoint = match ? match[0] : "";
   const imagekitId = urlEndpoint.split("/").pop() ?? "";
-
   return { publicKey, imagekitId, urlEndpoint };
 }
 
 export async function clickRevealPrivateKey(page: Page): Promise<void> {
-  // Click eye icon next to private key
   await page.locator("td:nth-child(2) .chakra-icon").first().click();
-  // Wait for OTP modal
   await page.waitForSelector('[aria-modal="true"]', { state: "visible", timeout: 10_000 });
 }
 
 export async function enterOtp(page: Page, code: string): Promise<void> {
   const digits = code.split("");
-  const inputs = page.locator('[aria-modal="true"] input');
+
+  // Fill each pin input via JS — set value + trigger React's onChange
   for (let i = 0; i < digits.length; i++) {
-    await inputs.nth(i).fill(digits[i]);
+    await page.evaluate(
+      ({ index, digit }) => {
+        const input = document.querySelector(`input[data-index="${index}"]`) as HTMLInputElement;
+        if (!input) return;
+        // Focus + set value + dispatch events that React/Chakra listens to
+        input.focus();
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype,
+          "value",
+        )!.set!;
+        nativeInputValueSetter.call(input, digit);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      },
+      { index: i, digit: digits[i] },
+    );
+    await page.waitForTimeout(100);
   }
-  await page.getByRole("button", { name: "Verify" }).click();
+
+  await page.waitForTimeout(1000);
+
+  // Check if modal auto-closed (ImageKit auto-verifies on last digit)
+  const modalVisible = (await page.locator('[aria-modal="true"]').count()) > 0;
+  if (!modalVisible) return;
+
+  // Try clicking Verify if enabled
+  const verifyBtn = page.getByRole("button", { name: "Verify" });
+  const isDisabled = await verifyBtn.isDisabled().catch(() => true);
+  if (!isDisabled) {
+    await verifyBtn.click();
+    await page.waitForTimeout(3000);
+    return;
+  }
+
+  // Button disabled — nativeInputValueSetter didn't trigger Chakra properly
+  // Fallback: click first input and type via keyboard
+  const firstInput = page.locator('[aria-modal="true"] input').first();
+  await firstInput.click();
+  // Clear all inputs first
+  for (let i = 0; i < 6; i++) {
+    await page.keyboard.press("Backspace");
+  }
+  await page.keyboard.type(code, { delay: 150 });
+  await page.waitForTimeout(2000);
+
+  // Check if modal closed after keyboard input
+  const stillVisible = (await page.locator('[aria-modal="true"]').count()) > 0;
+  if (!stillVisible) return;
+
+  // Try Verify button again
+  await verifyBtn.click({ timeout: 10_000 }).catch(() => {});
   await page.waitForTimeout(3000);
 }
 
 export async function extractPrivateKey(page: Page): Promise<string> {
-  // After OTP verification, private key should be unmasked
   const value = await page.locator('input[value^="private_"]').inputValue();
   if (value.includes("****")) {
     throw new Error("Private key still masked after OTP");

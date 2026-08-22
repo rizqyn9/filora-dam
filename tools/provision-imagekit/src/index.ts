@@ -4,8 +4,13 @@ import { chromium } from "playwright";
 import { loadConfig } from "./config.js";
 import { generateEmail } from "./email-gen.js";
 import {
-  newBatch, loadBatch, saveBatch, setOutputDir, batchPath,
-  indicesWithStatus, type Batch,
+  newBatch,
+  loadBatch,
+  saveBatch,
+  setOutputDir,
+  batchPath,
+  indicesWithStatus,
+  type Batch,
 } from "./state.js";
 import { runAccount, type WorkerCallbacks } from "./worker.js";
 
@@ -53,6 +58,31 @@ async function main() {
       process.exit(1);
     }
     batch = loadBatch(batchId);
+    // Reset FAILED accounts to the best re-entry point based on available data
+    let resetCount = 0;
+    for (const a of batch.accounts) {
+      if (a.status !== "FAILED") continue;
+      const prev = a.status;
+      a.error = undefined;
+      if (a.private_key) {
+        a.status = "COMPLETED"; // already done
+      } else if (a.public_key) {
+        a.status = "ONBOARDING_COMPLETED"; // has keys page data, retry OTP reveal
+      } else if (a.imagekit_id) {
+        a.status = "AUTHENTICATED"; // has imagekit_id from onboarding, retry from there
+      } else if (a.client_number) {
+        a.status = "EMAIL_VERIFIED"; // registered+verified, retry login
+      } else {
+        a.status = "CREATED"; // nothing saved, start fresh
+      }
+      resetCount++;
+      console.log(`  reset [${a.id}] ${a.email}: FAILED → ${a.status}`);
+    }
+    if (resetCount > 0) {
+      saveBatch(batch);
+      console.log(`  (${resetCount} accounts reset)\n`);
+    }
+    saveBatch(batch);
     console.log(`Resuming: ${batch.id} (${batch.accounts.length} accounts)`);
     console.log(`State: ${batchPath(batch)}\n`);
   } else {
@@ -82,12 +112,15 @@ async function main() {
 
   const callbacks: WorkerCallbacks = {
     async onHumanRequired(accountId, email, reason) {
-      console.log(`\n  ⚠️  [${accountId}] ${email} — HUMAN REQUIRED: ${reason}`);
+      console.log(`\n  ⚠️  ${ts()} [${accountId}] ${email}`);
+      console.log(`      HUMAN REQUIRED: ${reason}`);
       console.log(`      Solve it in the browser, then press Enter here.`);
-      await new Promise<void>((resolve) => rl.question("      Press Enter when done... ", () => resolve()));
+      await new Promise<void>((resolve) =>
+        rl.question("      Press Enter when done... ", () => resolve()),
+      );
     },
     log(accountId, msg) {
-      console.log(`  [${accountId}] ${msg}`);
+      console.log(`  ${ts()} [${accountId}] ${msg}`);
     },
   };
 
@@ -129,8 +162,26 @@ function printSummary(batch: Batch) {
   const failed = indicesWithStatus(batch, "FAILED").length;
   const other = batch.accounts.length - completed - failed;
   console.log(`\n=== SUMMARY ===`);
-  console.log(`Completed: ${completed} | Failed: ${failed} | In-progress: ${other} | Total: ${batch.accounts.length}`);
-  console.log(`State: ${batchPath(batch)}`);
+  console.log(
+    `Completed: ${completed} | Failed: ${failed} | In-progress: ${other} | Total: ${batch.accounts.length}`,
+  );
+  if (failed > 0) {
+    console.log(`\nFailed:`);
+    for (const a of batch.accounts) {
+      if (a.status === "FAILED") console.log(`  [${a.id}] ${a.email} — ${a.error}`);
+    }
+  }
+  if (completed > 0) {
+    console.log(`\nCompleted:`);
+    for (const a of batch.accounts) {
+      if (a.status === "COMPLETED") console.log(`  [${a.id}] ${a.email} → ${a.url_endpoint}`);
+    }
+  }
+  console.log(`\nState: ${batchPath(batch)}`);
+}
+
+function ts(): string {
+  return new Date().toISOString().slice(11, 19);
 }
 
 main().catch((err) => {

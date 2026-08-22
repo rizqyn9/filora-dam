@@ -8,17 +8,10 @@ import * as browser from "./browser.js";
 import { waitForMessage } from "./gmail/gmail.js";
 
 export interface WorkerCallbacks {
-  /** Called when account needs human intervention. Worker blocks until resolved. */
   onHumanRequired(accountId: string, email: string, reason: string): Promise<void>;
-  /** Log a message for this account. */
   log(accountId: string, msg: string): void;
 }
 
-/**
- * Runs a single account through the full state machine.
- * Owns a Page within the shared BrowserContext.
- * Blocks on CAPTCHA until operator resolves.
- */
 export async function runAccount(
   ctx: BrowserContext,
   cfg: Config,
@@ -29,165 +22,226 @@ export async function runAccount(
   const account = batch.accounts[idx];
   const { id, email } = account;
   let page: Page | null = null;
+  const startTime = Date.now();
+
+  const log = (msg: string) => cb.log(id, msg);
+
+  log(`start | email=${email} | state=${account.status}`);
 
   try {
     page = await ctx.newPage();
+    log("browser tab opened");
+
+    // For resumed accounts past login, we need to authenticate first
+    const needsLoginForResume = [
+      "AUTHENTICATED",
+      "ONBOARDING_REQUIRED",
+      "ONBOARDING_COMPLETED",
+      "CONFIG_RETRIEVAL",
+      "PRIVATE_KEY_OTP_PENDING",
+    ].includes(account.status);
+
+    if (needsLoginForResume) {
+      log("resume — logging in first...");
+      const loginResult = await browser.login(page, cfg, email);
+      if (loginResult.state === "captcha") {
+        log("LOGIN CAPTCHA on resume — solve in browser");
+        const successPromise = browser.listenForLoginSuccess(page);
+        await cb.onHumanRequired(id, email, "login captcha (resume)");
+        const afterHuman = await successPromise;
+        if (afterHuman.state !== "authenticated") {
+          await fail(batch, idx, afterHuman.error ?? "Login failed on resume");
+          return;
+        }
+      } else if (loginResult.state === "error") {
+        await fail(batch, idx, loginResult.error ?? "Login failed on resume");
+        return;
+      }
+      log(`resume login OK | url=${page.url()}`);
+    }
 
     // --- REGISTRATION ---
     if (account.status === "CREATED") {
       await transition(batch, idx, "REGISTRATION");
-      cb.log(id, "registering...");
+      log("→ REGISTRATION");
 
-      await browser.register(page, cfg, email);
-      const regState = await browser.detectRegistrationState(page);
+      const regResult = await browser.register(page, cfg, email);
+      log(
+        `register result: state=${regResult.state}${regResult.error ? ` error=${regResult.error}` : ""}`,
+      );
 
-      if (regState.state === "captcha") {
+      if (regResult.state === "captcha") {
         await transition(batch, idx, "REGISTRATION_HUMAN_REQUIRED");
-        cb.log(id, "CAPTCHA — solve in browser");
+        log("→ REGISTRATION_HUMAN_REQUIRED");
+        const successPromise = browser.listenForRegistrationSuccess(page);
         await cb.onHumanRequired(id, email, "registration captcha");
-        // Re-check after human intervention
-        const afterHuman = await browser.detectRegistrationState(page);
+        log("human resolved, waiting for register response...");
+        const afterHuman = await successPromise;
+        log(
+          `post-captcha result: state=${afterHuman.state}${afterHuman.error ? ` error=${afterHuman.error}` : ""}`,
+        );
         if (afterHuman.state !== "email_pending") {
-          await fail(batch, idx, `Post-captcha state: ${afterHuman.state} ${afterHuman.error ?? ""}`);
+          await fail(batch, idx, afterHuman.error ?? "Registration failed after captcha");
           return;
         }
-      } else if (regState.state === "error") {
-        await fail(batch, idx, regState.error ?? "Registration failed");
+      } else if (regResult.state === "error") {
+        await fail(batch, idx, regResult.error ?? "Registration failed");
         await browser.takeScreenshot(page, `${id}_reg_error`);
         return;
       }
 
       await transition(batch, idx, "EMAIL_VERIFICATION_PENDING");
-      cb.log(id, "registered — waiting for verification email");
+      log("→ EMAIL_VERIFICATION_PENDING");
     }
 
     // --- EMAIL VERIFICATION ---
     if (account.status === "EMAIL_VERIFICATION_PENDING") {
-      cb.log(id, "polling Gmail for verification email...");
+      const query = `to:${email} from:imagekit subject:"Account Verification" newer_than:10m`;
+      log(`gmail query: ${query}`);
 
-      const msg = await waitForMessage({
-        query: `to:${email} from:imagekit subject:"Account Verification" newer_than:10m`,
-        timeoutMs: 180_000,
-        intervalMs: 3000,
-      });
+      const msg = await waitForMessage({ query, timeoutMs: 180_000, intervalMs: 3000 });
+      log(`gmail found: subject="${msg.subject}" date="${msg.date}"`);
 
-      // Extract verification URL from HTML body
       const verifyUrl = extractVerificationUrl(msg.html);
+      log(`verify URL: ${verifyUrl ?? "NOT FOUND"}`);
       if (!verifyUrl) {
         await fail(batch, idx, "Could not extract verification URL from email");
         return;
       }
 
-      // Navigate to verification URL
       await page.goto(verifyUrl, { waitUntil: "commit" });
       await page.waitForTimeout(3000);
+      log(`after verify navigation: url=${page.url()}`);
 
       await transition(batch, idx, "EMAIL_VERIFIED");
-      cb.log(id, "email verified");
+      log("→ EMAIL_VERIFIED");
     }
 
     // --- LOGIN ---
     if (account.status === "EMAIL_VERIFIED") {
       await transition(batch, idx, "LOGIN");
-      cb.log(id, "logging in...");
+      log("→ LOGIN | submitting... (solve captcha in browser if it appears)");
 
-      await browser.login(page, cfg, email);
-      const loginState = await browser.detectLoginState(page);
+      const loginResult = await browser.login(page, cfg, email);
+      log(
+        `login result: state=${loginResult.state}${loginResult.error ? ` error=${loginResult.error}` : ""}`,
+      );
 
-      if (loginState.state === "captcha") {
+      if (loginResult.state === "captcha") {
         await transition(batch, idx, "LOGIN_HUMAN_REQUIRED");
-        cb.log(id, "LOGIN CAPTCHA — solve in browser");
+        log("→ LOGIN_HUMAN_REQUIRED");
+        const successPromise = browser.listenForLoginSuccess(page);
         await cb.onHumanRequired(id, email, "login captcha");
-        // Re-check
-        const afterHuman = await browser.detectLoginState(page);
+        log("human resolved, waiting for login response...");
+        const afterHuman = await successPromise;
+        log(
+          `post-login-captcha: state=${afterHuman.state}${afterHuman.error ? ` error=${afterHuman.error}` : ""}`,
+        );
         if (afterHuman.state !== "authenticated") {
-          await fail(batch, idx, `Post-login-captcha state: ${afterHuman.state}`);
+          await fail(batch, idx, afterHuman.error ?? "Login failed after captcha");
           return;
         }
-      } else if (loginState.state === "error") {
-        await fail(batch, idx, loginState.error ?? "Login failed");
+      } else if (loginResult.state === "error") {
+        await fail(batch, idx, loginResult.error ?? "Login failed");
         await browser.takeScreenshot(page, `${id}_login_error`);
         return;
       }
 
       await transition(batch, idx, "AUTHENTICATED");
-      cb.log(id, "authenticated");
+      log(`→ AUTHENTICATED | url=${page.url()}`);
     }
 
     // --- ONBOARDING ---
     if (account.status === "AUTHENTICATED") {
       const onboardState = await browser.checkOnboardingState(page);
+      log(`onboarding check: ${onboardState} | url=${page.url()}`);
       if (onboardState === "required") {
         await transition(batch, idx, "ONBOARDING_REQUIRED");
-        cb.log(id, "completing onboarding...");
+        log("→ ONBOARDING_REQUIRED");
         await browser.completeOnboarding(page, cfg);
       }
       await transition(batch, idx, "ONBOARDING_COMPLETED");
-      cb.log(id, "onboarded");
+      log(`→ ONBOARDING_COMPLETED | url=${page.url()}`);
     }
 
-    // Resume from ONBOARDING_REQUIRED (e.g. on resume after crash)
     if (account.status === "ONBOARDING_REQUIRED") {
-      cb.log(id, "completing onboarding...");
+      log("resuming onboarding...");
       await browser.completeOnboarding(page, cfg);
       await transition(batch, idx, "ONBOARDING_COMPLETED");
-      cb.log(id, "onboarded");
+      log(`→ ONBOARDING_COMPLETED | url=${page.url()}`);
     }
 
     // --- CONFIG RETRIEVAL ---
     if (account.status === "ONBOARDING_COMPLETED") {
       await transition(batch, idx, "CONFIG_RETRIEVAL");
-      cb.log(id, "extracting keys...");
+      log("→ CONFIG_RETRIEVAL | navigating to API keys...");
 
       await browser.navigateToApiKeys(page);
+      log(`api keys page loaded | url=${page.url()}`);
+
       const keys = await browser.extractPublicKeys(page);
+      log(
+        `extracted: publicKey=${keys.publicKey} imagekitId=${keys.imagekitId} endpoint=${keys.urlEndpoint}`,
+      );
+
       await update(batch, idx, {
         public_key: keys.publicKey,
         imagekit_id: keys.imagekitId,
         url_endpoint: keys.urlEndpoint,
       });
-      cb.log(id, `public: ${keys.publicKey}`);
 
-      // Initiate private key reveal
+      log("clicking reveal private key...");
       await browser.clickRevealPrivateKey(page);
       await transition(batch, idx, "PRIVATE_KEY_OTP_PENDING");
-      cb.log(id, "OTP sent — polling Gmail...");
+      log("→ PRIVATE_KEY_OTP_PENDING | OTP modal visible");
     }
 
     // --- PRIVATE KEY OTP ---
     if (account.status === "PRIVATE_KEY_OTP_PENDING") {
-      // Wait for OTP email
-      const otpMsg = await waitForMessage({
-        query: `to:${email} from:imagekit subject:"Verification code for a sensitive action" newer_than:5m`,
-        timeoutMs: 120_000,
-        intervalMs: 3000,
-      });
+      const afterEpoch = Math.floor(Date.now() / 1000) - 30;
+      const query = `to:${email} from:imagekit subject:"Verification code for a sensitive action" after:${afterEpoch}`;
+      log(`gmail OTP query: ${query}`);
 
-      const otp = extractOtp(otpMsg.text || otpMsg.html);
+      const otpMsg = await waitForMessage({ query, timeoutMs: 120_000, intervalMs: 3000 });
+      log(`gmail OTP found: subject="${otpMsg.subject}" date="${otpMsg.date}"`);
+
+      const otpBody = otpMsg.text || otpMsg.html;
+      const otp = extractOtp(otpBody);
+      log(`extracted OTP: ${otp ?? "NOT FOUND"} (body length: ${otpBody.length})`);
+
       if (!otp) {
+        log(`body preview: ${otpBody.slice(0, 300)}`);
         await fail(batch, idx, "Could not extract OTP from email");
         return;
       }
-      cb.log(id, "OTP received, entering...");
 
+      log(`entering OTP: ${otp}`);
       await browser.enterOtp(page, otp);
+
+      log("checking private key...");
       const privateKey = await browser.extractPrivateKey(page);
+      log(`private key extracted (length=${privateKey.length})`);
+
       await update(batch, idx, { private_key: privateKey });
       await transition(batch, idx, "PRIVATE_KEY_REVEALED");
-      cb.log(id, "private key revealed");
+      log("→ PRIVATE_KEY_REVEALED");
     }
 
     // --- COMPLETED ---
     if (account.status === "PRIVATE_KEY_REVEALED") {
       await transition(batch, idx, "COMPLETED");
-      cb.log(id, "COMPLETED");
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      log(`✅ COMPLETED in ${elapsed}s`);
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
     await fail(batch, idx, msg);
-    cb.log(id, `FAILED: ${msg}`);
+    log(`❌ FAILED after ${elapsed}s: ${msg}`);
     if (page) {
-      await browser.takeScreenshot(page, `${id}_crash`).catch(() => {});
+      log(`current url: ${page.url()}`);
+      const screenshot = await browser.takeScreenshot(page, `${id}_crash`).catch(() => null);
+      if (screenshot) log(`screenshot: ${screenshot}`);
     }
   } finally {
     if (page) await page.close().catch(() => {});
@@ -197,16 +251,31 @@ export async function runAccount(
 // --- Helpers ---
 
 function extractVerificationUrl(html: string): string | null {
-  // Look for href in an <a> tag containing "Verify" text or imagekit verify URL
   const hrefMatch = html.match(/href="(https:\/\/imagekit\.io\/[^"]*verify[^"]*)"/i);
   if (hrefMatch) return hrefMatch[1];
-  // Fallback: any imagekit URL with token-like params
   const urlMatch = html.match(/href="(https:\/\/imagekit\.io\/[^"]+)"/);
   return urlMatch?.[1] ?? null;
 }
 
 function extractOtp(text: string): string | null {
-  // Find a 6-digit number
-  const match = text.match(/\b(\d{6})\b/);
-  return match?.[1] ?? null;
+  // ImageKit OTP: code in a div with letter-spacing:6px and font-size:28px
+  const styledMatch = text.match(/letter-spacing:\s*6px[^>]*>(\d{6})</);
+  if (styledMatch) return styledMatch[1];
+
+  const fontMatch = text.match(/font-size:\s*28px[^>]*>(\d{6})</);
+  if (fontMatch) return fontMatch[1];
+
+  // 6 digits inside a closing div tag
+  const tagMatch = text.match(/>(\d{6})<\/div>/);
+  if (tagMatch) return tagMatch[1];
+
+  // Standalone line
+  const lineMatch = text.match(/^\s*(\d{6})\s*$/m);
+  if (lineMatch) return lineMatch[1];
+
+  // Last 6-digit number in body
+  const allMatches = [...text.matchAll(/\b(\d{6})\b/g)];
+  if (allMatches.length > 0) return allMatches[allMatches.length - 1][1];
+
+  return null;
 }
