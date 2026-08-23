@@ -109,7 +109,7 @@ async function main() {
 
   console.log(`Accounts to process: ${pending.length}`);
   console.log(`Concurrency: ${concurrency} | Spawn delay: ${spawnDelaySec}s`);
-  console.log("Launching browser...\n");
+  console.log("Launching browsers...\n");
 
   const callbacks: WorkerCallbacks = {
     log(accountId, msg) {
@@ -117,20 +117,20 @@ async function main() {
     },
   };
 
-  // Temp data dir per run — no lock conflicts, no session carry-over between runs
-  const userDataDir = mkdtempSync(join(tmpdir(), "imagekit-provision-"));
-  console.log(`  browser data: ${userDataDir}`);
+  // Each worker gets its own browser instance — full cookie/session isolation
+  async function launchWorkerBrowser() {
+    const dataDir = mkdtempSync(join(tmpdir(), "imagekit-worker-"));
+    const ctx = await chromium.launchPersistentContext(dataDir, {
+      headless: false,
+      args: BROWSER_ARGS,
+      ...CONTEXT_OPTIONS,
+    });
 
-  const ctx = await chromium.launchPersistentContext(userDataDir, {
-    headless: false,
-    args: BROWSER_ARGS,
-    ...CONTEXT_OPTIONS,
-  });
+    if (cfg.google_stt_api_key) {
+      await configureBuster(ctx, cfg.google_stt_api_key).catch(() => {});
+    }
 
-  // Configure Buster extension once for the shared context
-  if (cfg.google_stt_api_key) {
-    const ok = await configureBuster(ctx, cfg.google_stt_api_key);
-    if (!ok) console.log("  ⚠️  Buster config failed (will use human fallback)");
+    return ctx;
   }
 
   // Worker pool: run up to `concurrency` accounts simultaneously
@@ -140,7 +140,9 @@ async function main() {
   async function spawnNext(): Promise<void> {
     if (queue.length === 0) return;
     const idx = queue.shift()!;
+    const ctx = await launchWorkerBrowser();
     const p = runAccount(ctx, cfg, batch, idx, callbacks).then(async () => {
+      await ctx.close().catch(() => {});
       const i = running.indexOf(p);
       if (i >= 0) running.splice(i, 1);
       // ponytail: rate-limit between spawns to avoid burst detection
@@ -162,8 +164,6 @@ async function main() {
   while (running.length > 0) {
     await Promise.race(running);
   }
-
-  await ctx.close();
 
   printSummary(batch);
 }
