@@ -20,15 +20,19 @@ async function warmUp(page: Page): Promise<void> {
 
 /**
  * Solve reCAPTCHA on the current page using the Buster extension.
- * Flow: click #recaptcha-anchor-label → click #solver-button → wait for solve.
- * If still showing after timeout, reload captcha and retry (max 3 attempts).
+ *
+ * Buster's #solver-button lives inside a CLOSED shadow DOM — can't be clicked
+ * via normal selectors. Instead we click #recaptcha-audio-button to switch to
+ * audio challenge, then Buster auto-solves it.
+ *
+ * If that fails, reload and retry up to MAX_ATTEMPTS times.
  */
 export async function solveRecaptchaWithBuster(
   page: Page,
   apiEndpoint: string,
 ): Promise<{ state: "solved" | "error"; error?: string }> {
   const MAX_ATTEMPTS = 3;
-  const SOLVE_TIMEOUT = 15_000; // 15s per attempt
+  const SOLVE_TIMEOUT = 20_000;
 
   const anchorFrame = page.frameLocator(
     'iframe[src*="recaptcha/api2/anchor"], iframe[src*="recaptcha/enterprise/anchor"]',
@@ -48,27 +52,40 @@ export async function solveRecaptchaWithBuster(
       return await resubmitAfterCaptcha(page, apiEndpoint);
     }
 
-    // Challenge appeared — try Buster up to MAX_ATTEMPTS times
+    // Challenge appeared — try audio solve via Buster
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      // Wait for Buster's solver button to appear
-      const solverBtn = bframe.locator("#solver-button");
-      await solverBtn.waitFor({ state: "visible", timeout: 15_000 }).catch(() => {});
+      // Click audio button to switch to audio challenge (Buster hooks into this)
+      const audioBtn = bframe.locator("#recaptcha-audio-button");
+      await audioBtn.waitFor({ state: "visible", timeout: 10_000 }).catch(() => {});
 
-      if ((await solverBtn.count()) === 0) {
-        return { state: "error", error: "Buster #solver-button not found in challenge frame" };
+      if ((await audioBtn.count()) > 0) {
+        await audioBtn.click();
+        await page.waitForTimeout(randomDelay(1000, 2000));
       }
 
-      // Click Buster solver
-      await solverBtn.click();
+      // Now try to click Buster's solver button via the help-button-holder host element
+      // The closed shadow root prevents direct access, but we can dispatch click via JS
+      await bframe
+        .locator(".help-button-holder")
+        .evaluate((el) => {
+          const shadow = (el as any).shadowRoot;
+          if (shadow) {
+            const btn = shadow.querySelector("#solver-button");
+            if (btn) (btn as HTMLElement).click();
+          }
+        })
+        .catch(() => {
+          // Closed shadow root — can't access. Buster may auto-trigger on audio page.
+        });
 
-      // Wait for solve (poll anchor checkbox)
+      // Poll for solve
       const solved = await pollForSolve(anchorFrame, SOLVE_TIMEOUT);
       if (solved) {
         await page.waitForTimeout(randomDelay(200, 500));
         return await resubmitAfterCaptcha(page, apiEndpoint);
       }
 
-      // Not solved — reload captcha and retry
+      // Not solved — reload and retry
       if (attempt < MAX_ATTEMPTS) {
         const reloadBtn = bframe.locator("#recaptcha-reload-button");
         if ((await reloadBtn.count()) > 0) {
