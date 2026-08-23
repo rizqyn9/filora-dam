@@ -29,10 +29,7 @@ export async function runAccount(
 
   try {
     page = await ctx.newPage();
-    // Clear session from previous account — prevent login carry-over
-    await page.context().clearCookies();
-    await page.context().clearPermissions();
-    log("browser tab opened (clean session)");
+    log("browser tab opened");
 
     // For resumed accounts past login, we need to authenticate first
     const needsLoginForResume = [
