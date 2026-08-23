@@ -93,46 +93,47 @@ export async function runAccount(
       );
 
       if (regResult.state === "captcha") {
-        // Try auto-solve via CapSolver if API key configured
-        if (cfg.capsolver_api_key) {
-          log("captcha detected — attempting auto-solve via CapSolver...");
+        // Strategy: Buster (free) → CapSolver (paid) → Human
+        let solved = false;
+
+        // 1. Try Buster extension (reCAPTCHA audio + speech recognition)
+        if (cfg.watson_stt_api_key) {
+          log("captcha detected — attempting Buster reCAPTCHA solver...");
+          const busterResult = await browser.solveRecaptchaWithBuster(page, "/api/register");
+          log(
+            `buster result: state=${busterResult.state}${busterResult.error ? ` error=${busterResult.error}` : ""}`,
+          );
+          if (busterResult.state === "solved") {
+            solved = true;
+          } else {
+            log(`buster failed: ${busterResult.error}`);
+          }
+        }
+
+        // 2. Fallback: CapSolver API
+        if (!solved && cfg.capsolver_api_key) {
+          log("trying CapSolver API fallback...");
           const solveResult = await browser.autoSolveTurnstile(
             page,
             cfg.capsolver_api_key,
             "/api/register",
           );
           log(
-            `auto-solve result: state=${solveResult.state}${solveResult.error ? ` error=${solveResult.error}` : ""}`,
+            `capsolver result: state=${solveResult.state}${solveResult.error ? ` error=${solveResult.error}` : ""}`,
           );
           if (solveResult.state === "solved") {
-            await transition(batch, idx, "EMAIL_VERIFICATION_PENDING");
-            log("→ EMAIL_VERIFICATION_PENDING (auto-solved)");
+            solved = true;
           } else {
-            // Auto-solve failed — fall back to human
-            log(`auto-solve failed, falling back to human: ${solveResult.error}`);
-            await transition(batch, idx, "REGISTRATION_HUMAN_REQUIRED");
-            const successPromise = browser.listenForRegistrationSuccess(page);
-            await cb.onHumanRequired(
-              id,
-              email,
-              `registration captcha (auto-solve failed: ${solveResult.error})`,
-            );
-            log("human resolved, waiting for register response...");
-            const afterHuman = await successPromise;
-            log(
-              `post-captcha result: state=${afterHuman.state}${afterHuman.error ? ` error=${afterHuman.error}` : ""}`,
-            );
-            if (afterHuman.state !== "email_pending") {
-              await fail(batch, idx, afterHuman.error ?? "Registration failed after captcha");
-              return;
-            }
+            log(`capsolver failed: ${solveResult.error}`);
           }
-        } else {
-          // No API key — manual human solve
+        }
+
+        // 3. Fallback: Human intervention
+        if (!solved) {
           await transition(batch, idx, "REGISTRATION_HUMAN_REQUIRED");
-          log("→ REGISTRATION_HUMAN_REQUIRED");
+          log("→ REGISTRATION_HUMAN_REQUIRED (auto-solve exhausted)");
           const successPromise = browser.listenForRegistrationSuccess(page);
-          await cb.onHumanRequired(id, email, "registration captcha");
+          await cb.onHumanRequired(id, email, "registration captcha (auto-solve failed)");
           log("human resolved, waiting for register response...");
           const afterHuman = await successPromise;
           log(
@@ -143,6 +144,9 @@ export async function runAccount(
             return;
           }
         }
+
+        await transition(batch, idx, "EMAIL_VERIFICATION_PENDING");
+        log("→ EMAIL_VERIFICATION_PENDING");
       } else if (regResult.state === "error") {
         await fail(batch, idx, regResult.error ?? "Registration failed");
         await browser.takeScreenshot(page, `${id}_reg_error`);

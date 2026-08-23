@@ -20,3 +20,10 @@ region: "Singapore (Singapore)"
 # Get one at https://capsolver.com — ~$2/1000 solves
 # If omitted, captcha falls back to manual human intervention
 capsolver_api_key: ""
+
+# IBM Watson Speech-to-Text for Buster reCAPTCHA audio solver (free tier: 500 min/month)
+# 1. Sign up at https://cloud.ibm.com
+# 2. Create Speech to Text service (free plan)
+# 3. Copy API key + URL from Manage tab
+watson_stt_url: ""
+watson_stt_api_key: ""

@@ -1,13 +1,20 @@
 /**
  * Anti-detection config for Playwright persistent contexts.
- * Reduces captcha trigger rate on ImageKit (Cloudflare Turnstile).
+ * Reduces captcha trigger rate on ImageKit + loads Buster reCAPTCHA solver.
  */
 
-/** Chrome launch args that suppress automation signals. */
+import { resolve } from "path";
+
+/** Absolute path to the unpacked Buster extension. */
+export const BUSTER_EXTENSION_PATH = resolve(import.meta.dirname, "../extensions/buster");
+
+/** Chrome launch args that suppress automation signals and load Buster. */
 export const BROWSER_ARGS = [
   "--disable-blink-features=AutomationControlled",
   "--no-first-run",
   "--no-default-browser-check",
+  `--disable-extensions-except=${BUSTER_EXTENSION_PATH}`,
+  `--load-extension=${BUSTER_EXTENSION_PATH}`,
 ];
 
 /** Context options for realistic fingerprint. */

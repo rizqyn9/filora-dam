@@ -14,6 +14,7 @@ import {
 } from "./state.js";
 import { runAccount, type WorkerCallbacks } from "./worker.js";
 import { BROWSER_ARGS, CONTEXT_OPTIONS } from "./stealth.js";
+import { configureBuster } from "./buster-setup.js";
 
 // @ts-ignore — gmail is JS
 import { authorize } from "./gmail/gmail.js";
@@ -135,6 +136,17 @@ async function main() {
       args: BROWSER_ARGS,
       ...CONTEXT_OPTIONS,
     });
+
+    // Configure Buster extension with Watson STT if credentials provided
+    if (cfg.watson_stt_url && cfg.watson_stt_api_key) {
+      const ok = await configureBuster(ctx, {
+        watsonSttUrl: cfg.watson_stt_url,
+        watsonSttApiKey: cfg.watson_stt_api_key,
+      });
+      if (!ok)
+        console.log(`  ⚠️  worker-${workerIdx}: Buster config failed (will use human fallback)`);
+    }
+
     workerContexts.push(ctx);
     return ctx;
   }

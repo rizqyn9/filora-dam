@@ -8,6 +8,9 @@ export interface Config {
   batch_size: number;
   region: string;
   capsolver_api_key?: string;
+  // Buster extension + IBM Watson STT for reCAPTCHA audio solving
+  watson_stt_url?: string;
+  watson_stt_api_key?: string;
 }
 
 export function loadConfig(path: string): Config {

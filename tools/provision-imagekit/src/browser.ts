@@ -16,6 +16,128 @@ async function warmUp(page: Page): Promise<void> {
   await page.waitForTimeout(randomDelay(2000, 5000));
 }
 
+// --- reCAPTCHA + Buster Auto-Solve ---
+
+/**
+ * Solve reCAPTCHA on the current page using the Buster extension.
+ * Flow: click checkbox → if challenge appears → click Buster button → wait for solve.
+ * Then re-submit the form and wait for the API response.
+ *
+ * Returns "solved" if reCAPTCHA was completed and form re-submitted successfully.
+ */
+export async function solveRecaptchaWithBuster(
+  page: Page,
+  apiEndpoint: string,
+): Promise<{ state: "solved" | "error"; error?: string }> {
+  try {
+    // Wait for reCAPTCHA iframe to appear
+    const anchorFrame = page.frameLocator(
+      'iframe[src*="recaptcha/api2/anchor"], iframe[src*="recaptcha/enterprise/anchor"]',
+    );
+
+    // Click the checkbox
+    await anchorFrame.locator(".recaptcha-checkbox-border, #recaptcha-anchor").click();
+    await page.waitForTimeout(randomDelay(2000, 4000));
+
+    // Check if already solved (green checkmark)
+    const checked = await anchorFrame
+      .locator('.recaptcha-checkbox-checked, [aria-checked="true"]')
+      .count();
+    if (checked > 0) {
+      // Solved without challenge — re-submit form
+      return await resubmitAfterCaptcha(page, apiEndpoint);
+    }
+
+    // Challenge appeared — find the bframe iframe where Buster injects its button
+    const bframe = page.frameLocator(
+      'iframe[src*="recaptcha/api2/bframe"], iframe[src*="recaptcha/enterprise/bframe"]',
+    );
+
+    // Wait for Buster's solve button to appear in the bframe
+    // Buster injects a button with class "button-holder" or an img with specific alt
+    const busterButton = bframe
+      .locator("#solver-button, .button-holder button, [data-buster]")
+      .first();
+
+    // If Buster button not immediately visible, wait a bit for the extension to inject
+    await busterButton.waitFor({ state: "visible", timeout: 10_000 }).catch(() => {});
+
+    const busterVisible = await busterButton.count();
+    if (busterVisible === 0) {
+      return { state: "error", error: "Buster button not found in reCAPTCHA challenge frame" };
+    }
+
+    // Click Buster's solve button
+    await busterButton.click();
+
+    // Wait for Buster to solve (it processes audio + speech recognition)
+    // The anchor frame checkbox should become checked
+    await page.waitForTimeout(3000);
+
+    // Poll for solution (max ~60s)
+    for (let i = 0; i < 20; i++) {
+      const solved = await anchorFrame
+        .locator('.recaptcha-checkbox-checked, [aria-checked="true"]')
+        .count();
+      if (solved > 0) {
+        await page.waitForTimeout(randomDelay(500, 1000));
+        return await resubmitAfterCaptcha(page, apiEndpoint);
+      }
+
+      // Check if Buster shows an error (retry audio if so)
+      const errorVisible = await bframe.locator(".rc-audiochallenge-error-message").count();
+      if (errorVisible > 0) {
+        return {
+          state: "error",
+          error: "Buster audio challenge failed (rate-limited or wrong answer)",
+        };
+      }
+
+      await page.waitForTimeout(3000);
+    }
+
+    return { state: "error", error: "Timeout waiting for Buster to solve reCAPTCHA" };
+  } catch (err) {
+    return {
+      state: "error",
+      error: `reCAPTCHA solve error: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+/** After captcha solved, re-click Submit and wait for API response. */
+async function resubmitAfterCaptcha(
+  page: Page,
+  apiEndpoint: string,
+): Promise<{ state: "solved" | "error"; error?: string }> {
+  const responsePromise = page.waitForResponse(
+    (res) => res.url().includes(apiEndpoint) && !res.url().includes("csrf"),
+    { timeout: 60_000 },
+  );
+
+  await page.getByRole("button", { name: "Submit" }).click();
+
+  try {
+    const res = await responsePromise;
+    const body = await res.json().catch(() => null);
+
+    if (body?.success) return { state: "solved" };
+    if (body?.isCaptchaRequired) {
+      return { state: "error", error: "Still captcha-required after solving reCAPTCHA" };
+    }
+    if (body?.error || body?.email) {
+      return { state: "error", error: body.email || body.error };
+    }
+    return { state: "solved" };
+  } catch {
+    const url = page.url();
+    if (url.includes("verify=true") || url.includes("/login") || url.includes("/dashboard")) {
+      return { state: "solved" };
+    }
+    return { state: "error", error: `No API response after reCAPTCHA solve. URL: ${url}` };
+  }
+}
+
 // --- Turnstile Auto-Solve ---
 
 /**
