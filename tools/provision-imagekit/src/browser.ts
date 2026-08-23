@@ -13,7 +13,7 @@ import { solveTurnstile } from "./captcha.js";
 /** Visit homepage before target page to build browsing history / cookie reputation. */
 async function warmUp(page: Page): Promise<void> {
   await page.goto("https://imagekit.io/", { waitUntil: "load", timeout: 60_000 });
-  await page.waitForTimeout(randomDelay(2000, 5000));
+  await page.waitForTimeout(randomDelay(1000, 2000));
 }
 
 // --- reCAPTCHA + Buster Auto-Solve ---
@@ -28,7 +28,7 @@ export async function solveRecaptchaWithBuster(
   apiEndpoint: string,
 ): Promise<{ state: "solved" | "error"; error?: string }> {
   const MAX_ATTEMPTS = 3;
-  const SOLVE_TIMEOUT = 30_000; // 30s per attempt
+  const SOLVE_TIMEOUT = 15_000; // 15s per attempt
 
   const anchorFrame = page.frameLocator(
     'iframe[src*="recaptcha/api2/anchor"], iframe[src*="recaptcha/enterprise/anchor"]',
@@ -40,7 +40,7 @@ export async function solveRecaptchaWithBuster(
   try {
     // Click the reCAPTCHA checkbox
     await anchorFrame.locator("#recaptcha-anchor-label").click();
-    await page.waitForTimeout(randomDelay(2000, 4000));
+    await page.waitForTimeout(randomDelay(1000, 2000));
 
     // Check if already solved (no challenge needed)
     const alreadySolved = await anchorFrame.locator('[aria-checked="true"]').count();
@@ -64,7 +64,7 @@ export async function solveRecaptchaWithBuster(
       // Wait for solve (poll anchor checkbox)
       const solved = await pollForSolve(anchorFrame, SOLVE_TIMEOUT);
       if (solved) {
-        await page.waitForTimeout(randomDelay(500, 1000));
+        await page.waitForTimeout(randomDelay(200, 500));
         return await resubmitAfterCaptcha(page, apiEndpoint);
       }
 
@@ -73,7 +73,7 @@ export async function solveRecaptchaWithBuster(
         const reloadBtn = bframe.locator("#recaptcha-reload-button");
         if ((await reloadBtn.count()) > 0) {
           await reloadBtn.click();
-          await page.waitForTimeout(randomDelay(2000, 4000));
+          await page.waitForTimeout(randomDelay(1000, 2000));
         }
       }
     }
@@ -96,7 +96,7 @@ async function pollForSolve(
   while (Date.now() < deadline) {
     const solved = await anchorFrame.locator('[aria-checked="true"]').count();
     if (solved > 0) return true;
-    await new Promise((r) => setTimeout(r, 2000));
+    await new Promise((r) => setTimeout(r, 500));
   }
   return false;
 }
@@ -200,7 +200,7 @@ export async function autoSolveTurnstile(
     }
   }, result.token);
 
-  await page.waitForTimeout(randomDelay(500, 1000));
+  await page.waitForTimeout(randomDelay(200, 500));
 
   // Listen for the API response after re-submitting
   const responsePromise = page.waitForResponse(
@@ -253,13 +253,13 @@ export async function register(
     state: "visible",
     timeout: 60_000,
   });
-  await page.waitForTimeout(randomDelay(3000, 6000));
+  await page.waitForTimeout(randomDelay(1500, 3000));
 
   // Fill form with human-like typing
   await humanType(page, 'input[placeholder="Enter your work email"]', email);
-  await page.waitForTimeout(randomDelay(500, 1500));
+  await page.waitForTimeout(randomDelay(300, 800));
   await humanType(page, 'input[placeholder="Enter your name"]', cfg.name);
-  await page.waitForTimeout(randomDelay(500, 1500));
+  await page.waitForTimeout(randomDelay(300, 800));
   await humanType(page, 'input[placeholder="Enter a password"]', cfg.password);
 
   // Uncheck marketing checkbox if checked
@@ -268,7 +268,7 @@ export async function register(
     await checkbox.uncheck();
   }
 
-  await page.waitForTimeout(randomDelay(800, 2000));
+  await page.waitForTimeout(randomDelay(400, 1000));
 
   // Listen for /api/register response BEFORE clicking submit
   const responsePromise = page.waitForResponse(
@@ -361,12 +361,12 @@ export async function login(
     state: "visible",
     timeout: 60_000,
   });
-  await page.waitForTimeout(randomDelay(3000, 6000));
+  await page.waitForTimeout(randomDelay(1500, 3000));
 
   await humanType(page, 'input[placeholder="Enter your work email"]', email);
-  await page.waitForTimeout(randomDelay(500, 1500));
+  await page.waitForTimeout(randomDelay(300, 800));
   await humanType(page, 'input[placeholder="Enter a password"]', cfg.password);
-  await page.waitForTimeout(randomDelay(800, 2000));
+  await page.waitForTimeout(randomDelay(400, 1000));
 
   // Listen for /api/login response before clicking
   const responsePromise = page.waitForResponse(
