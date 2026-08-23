@@ -20,89 +20,85 @@ async function warmUp(page: Page): Promise<void> {
 
 /**
  * Solve reCAPTCHA on the current page using the Buster extension.
- * Flow: click checkbox → if challenge appears → click Buster button → wait for solve.
- * Then re-submit the form and wait for the API response.
- *
- * Returns "solved" if reCAPTCHA was completed and form re-submitted successfully.
+ * Flow: click #recaptcha-anchor-label → click #solver-button → wait for solve.
+ * If still showing after timeout, reload captcha and retry (max 3 attempts).
  */
 export async function solveRecaptchaWithBuster(
   page: Page,
   apiEndpoint: string,
 ): Promise<{ state: "solved" | "error"; error?: string }> {
-  try {
-    // Wait for reCAPTCHA iframe to appear
-    const anchorFrame = page.frameLocator(
-      'iframe[src*="recaptcha/api2/anchor"], iframe[src*="recaptcha/enterprise/anchor"]',
-    );
+  const MAX_ATTEMPTS = 3;
+  const SOLVE_TIMEOUT = 30_000; // 30s per attempt
 
-    // Click the checkbox
-    await anchorFrame.locator(".recaptcha-checkbox-border, #recaptcha-anchor").click();
+  const anchorFrame = page.frameLocator(
+    'iframe[src*="recaptcha/api2/anchor"], iframe[src*="recaptcha/enterprise/anchor"]',
+  );
+  const bframe = page.frameLocator(
+    'iframe[src*="recaptcha/api2/bframe"], iframe[src*="recaptcha/enterprise/bframe"]',
+  );
+
+  try {
+    // Click the reCAPTCHA checkbox
+    await anchorFrame.locator("#recaptcha-anchor-label").click();
     await page.waitForTimeout(randomDelay(2000, 4000));
 
-    // Check if already solved (green checkmark)
-    const checked = await anchorFrame
-      .locator('.recaptcha-checkbox-checked, [aria-checked="true"]')
-      .count();
-    if (checked > 0) {
-      // Solved without challenge — re-submit form
+    // Check if already solved (no challenge needed)
+    const alreadySolved = await anchorFrame.locator('[aria-checked="true"]').count();
+    if (alreadySolved > 0) {
       return await resubmitAfterCaptcha(page, apiEndpoint);
     }
 
-    // Challenge appeared — find the bframe iframe where Buster injects its button
-    const bframe = page.frameLocator(
-      'iframe[src*="recaptcha/api2/bframe"], iframe[src*="recaptcha/enterprise/bframe"]',
-    );
+    // Challenge appeared — try Buster up to MAX_ATTEMPTS times
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      // Wait for Buster's solver button to appear
+      const solverBtn = bframe.locator("#solver-button");
+      await solverBtn.waitFor({ state: "visible", timeout: 15_000 }).catch(() => {});
 
-    // Wait for Buster's solve button to appear in the bframe
-    // Buster injects a button with class "button-holder" or an img with specific alt
-    const busterButton = bframe
-      .locator("#solver-button, .button-holder button, [data-buster]")
-      .first();
+      if ((await solverBtn.count()) === 0) {
+        return { state: "error", error: "Buster #solver-button not found in challenge frame" };
+      }
 
-    // If Buster button not immediately visible, wait a bit for the extension to inject
-    await busterButton.waitFor({ state: "visible", timeout: 10_000 }).catch(() => {});
+      // Click Buster solver
+      await solverBtn.click();
 
-    const busterVisible = await busterButton.count();
-    if (busterVisible === 0) {
-      return { state: "error", error: "Buster button not found in reCAPTCHA challenge frame" };
-    }
-
-    // Click Buster's solve button
-    await busterButton.click();
-
-    // Wait for Buster to solve (it processes audio + speech recognition)
-    // The anchor frame checkbox should become checked
-    await page.waitForTimeout(3000);
-
-    // Poll for solution (max ~60s)
-    for (let i = 0; i < 20; i++) {
-      const solved = await anchorFrame
-        .locator('.recaptcha-checkbox-checked, [aria-checked="true"]')
-        .count();
-      if (solved > 0) {
+      // Wait for solve (poll anchor checkbox)
+      const solved = await pollForSolve(anchorFrame, SOLVE_TIMEOUT);
+      if (solved) {
         await page.waitForTimeout(randomDelay(500, 1000));
         return await resubmitAfterCaptcha(page, apiEndpoint);
       }
 
-      // Check if Buster shows an error (retry audio if so)
-      const errorVisible = await bframe.locator(".rc-audiochallenge-error-message").count();
-      if (errorVisible > 0) {
-        return {
-          state: "error",
-          error: "Buster audio challenge failed (rate-limited or wrong answer)",
-        };
+      // Not solved — reload captcha and retry
+      if (attempt < MAX_ATTEMPTS) {
+        const reloadBtn = bframe.locator("#recaptcha-reload-button");
+        if ((await reloadBtn.count()) > 0) {
+          await reloadBtn.click();
+          await page.waitForTimeout(randomDelay(2000, 4000));
+        }
       }
-
-      await page.waitForTimeout(3000);
     }
 
-    return { state: "error", error: "Timeout waiting for Buster to solve reCAPTCHA" };
+    return { state: "error", error: `Buster failed after ${MAX_ATTEMPTS} attempts` };
   } catch (err) {
     return {
       state: "error",
       error: `reCAPTCHA solve error: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
+}
+
+/** Poll the anchor frame for solved state. */
+async function pollForSolve(
+  anchorFrame: ReturnType<Page["frameLocator"]>,
+  timeoutMs: number,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const solved = await anchorFrame.locator('[aria-checked="true"]').count();
+    if (solved > 0) return true;
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  return false;
 }
 
 /** After captcha solved, re-click Submit and wait for API response. */
