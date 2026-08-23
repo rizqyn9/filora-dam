@@ -126,40 +126,29 @@ async function main() {
     },
   };
 
-  // Each worker gets its own persistent context for cookie/fingerprint reputation
-  const workerContexts: Awaited<ReturnType<typeof chromium.launchPersistentContext>>[] = [];
+  // Single persistent context (required for Chrome extension loading)
+  // ponytail: persistent context needed for --load-extension, not for cookie reputation
+  const userDataDir = `${outputDir}/.browser-data`;
+  const ctx = await chromium.launchPersistentContext(userDataDir, {
+    headless: false,
+    args: BROWSER_ARGS,
+    ...CONTEXT_OPTIONS,
+  });
 
-  async function launchWorkerContext(workerIdx: number) {
-    const userDataDir = `${outputDir}/.browser-data/worker-${workerIdx}`;
-    const ctx = await chromium.launchPersistentContext(userDataDir, {
-      headless: false,
-      args: BROWSER_ARGS,
-      ...CONTEXT_OPTIONS,
-    });
-
-    // Configure Buster extension with Watson STT if credentials provided
-    if (cfg.google_stt_api_key) {
-      const ok = await configureBuster(ctx, cfg.google_stt_api_key);
-      if (!ok)
-        console.log(`  ⚠️  worker-${workerIdx}: Buster config failed (will use human fallback)`);
-    }
-
-    workerContexts.push(ctx);
-    return ctx;
+  // Configure Buster extension once for the shared context
+  if (cfg.google_stt_api_key) {
+    const ok = await configureBuster(ctx, cfg.google_stt_api_key);
+    if (!ok) console.log("  ⚠️  Buster config failed (will use human fallback)");
   }
 
   // Worker pool: run up to `concurrency` accounts simultaneously
   const queue = [...pending];
   const running: Promise<void>[] = [];
-  let workerCounter = 0;
 
   async function spawnNext(): Promise<void> {
     if (queue.length === 0) return;
     const idx = queue.shift()!;
-    const wIdx = workerCounter++;
-    const ctx = await launchWorkerContext(wIdx);
     const p = runAccount(ctx, cfg, batch, idx, callbacks).then(async () => {
-      await ctx.close().catch(() => {});
       const i = running.indexOf(p);
       if (i >= 0) running.splice(i, 1);
       // ponytail: rate-limit between spawns to avoid burst detection
@@ -183,6 +172,7 @@ async function main() {
   }
 
   rl.close();
+  await ctx.close();
 
   printSummary(batch);
 }
