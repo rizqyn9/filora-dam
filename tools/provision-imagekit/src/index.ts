@@ -138,11 +138,8 @@ async function main() {
     });
 
     // Configure Buster extension with Watson STT if credentials provided
-    if (cfg.watson_stt_url && cfg.watson_stt_api_key) {
-      const ok = await configureBuster(ctx, {
-        watsonSttUrl: cfg.watson_stt_url,
-        watsonSttApiKey: cfg.watson_stt_api_key,
-      });
+    if (cfg.google_stt_api_key) {
+      const ok = await configureBuster(ctx, cfg.google_stt_api_key);
       if (!ok)
         console.log(`  ⚠️  worker-${workerIdx}: Buster config failed (will use human fallback)`);
     }

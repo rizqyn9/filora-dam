@@ -97,7 +97,7 @@ export async function runAccount(
         let solved = false;
 
         // 1. Try Buster extension (reCAPTCHA audio + speech recognition)
-        if (cfg.watson_stt_api_key) {
+        if (cfg.google_stt_api_key) {
           log("captcha detected — attempting Buster reCAPTCHA solver...");
           const busterResult = await browser.solveRecaptchaWithBuster(page, "/api/register");
           log(
