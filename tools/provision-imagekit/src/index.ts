@@ -1,5 +1,7 @@
 import { parseArgs } from "util";
-import { createInterface } from "readline";
+import { mkdtempSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import { chromium } from "playwright";
 import { loadConfig } from "./config.js";
 import { generateEmail } from "./email-gen.js";
@@ -107,28 +109,18 @@ async function main() {
 
   console.log(`Accounts to process: ${pending.length}`);
   console.log(`Concurrency: ${concurrency} | Spawn delay: ${spawnDelaySec}s`);
-  console.log("Launching workers with separate persistent contexts...\n");
-
-  // Readline for human intervention prompts
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  console.log("Launching browser...\n");
 
   const callbacks: WorkerCallbacks = {
-    async onHumanRequired(accountId, email, reason) {
-      console.log(`\n  ⚠️  ${ts()} [${accountId}] ${email}`);
-      console.log(`      HUMAN REQUIRED: ${reason}`);
-      console.log(`      Solve it in the browser, then press Enter here.`);
-      await new Promise<void>((resolve) =>
-        rl.question("      Press Enter when done... ", () => resolve()),
-      );
-    },
     log(accountId, msg) {
       console.log(`  ${ts()} [${accountId}] ${msg}`);
     },
   };
 
-  // Single persistent context (required for Chrome extension loading)
-  // ponytail: persistent context needed for --load-extension, not for cookie reputation
-  const userDataDir = `${outputDir}/.browser-data`;
+  // Temp data dir per run — no lock conflicts, no session carry-over between runs
+  const userDataDir = mkdtempSync(join(tmpdir(), "imagekit-provision-"));
+  console.log(`  browser data: ${userDataDir}`);
+
   const ctx = await chromium.launchPersistentContext(userDataDir, {
     headless: false,
     args: BROWSER_ARGS,
@@ -171,7 +163,6 @@ async function main() {
     await Promise.race(running);
   }
 
-  rl.close();
   await ctx.close();
 
   printSummary(batch);

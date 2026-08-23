@@ -8,7 +8,6 @@ import * as browser from "./browser.js";
 import { waitForMessage } from "./gmail/gmail.js";
 
 export interface WorkerCallbacks {
-  onHumanRequired(accountId: string, email: string, reason: string): Promise<void>;
   log(accountId: string, msg: string): void;
 }
 
@@ -30,7 +29,10 @@ export async function runAccount(
 
   try {
     page = await ctx.newPage();
-    log("browser tab opened");
+    // Clear session from previous account — prevent login carry-over
+    await page.context().clearCookies();
+    await page.context().clearPermissions();
+    log("browser tab opened (clean session)");
 
     // For resumed accounts past login, we need to authenticate first
     const needsLoginForResume = [
@@ -53,10 +55,8 @@ export async function runAccount(
             "/api/login",
           );
           if (solveResult.state !== "solved") {
-            log(`auto-solve failed: ${solveResult.error} — falling back to human`);
-            const successPromise = browser.listenForLoginSuccess(page);
-            await cb.onHumanRequired(id, email, "login captcha (resume, auto-solve failed)");
-            const afterHuman = await successPromise;
+            log(`auto-solve failed: ${solveResult.error} — waiting for human solve in browser...`);
+            const afterHuman = await browser.listenForLoginSuccess(page);
             if (afterHuman.state !== "authenticated") {
               await fail(batch, idx, afterHuman.error ?? "Login failed on resume");
               return;
@@ -66,10 +66,8 @@ export async function runAccount(
             .waitForURL((url) => url.pathname.includes("/dashboard"), { timeout: 30_000 })
             .catch(() => {});
         } else {
-          log("LOGIN CAPTCHA on resume — solve in browser");
-          const successPromise = browser.listenForLoginSuccess(page);
-          await cb.onHumanRequired(id, email, "login captcha (resume)");
-          const afterHuman = await successPromise;
+          log("LOGIN CAPTCHA on resume — ⚠️  SOLVE IN BROWSER, waiting...");
+          const afterHuman = await browser.listenForLoginSuccess(page);
           if (afterHuman.state !== "authenticated") {
             await fail(batch, idx, afterHuman.error ?? "Login failed on resume");
             return;
@@ -128,14 +126,11 @@ export async function runAccount(
           }
         }
 
-        // 3. Fallback: Human intervention
+        // 3. Fallback: Human intervention (non-blocking — waits for solve in browser)
         if (!solved) {
           await transition(batch, idx, "REGISTRATION_HUMAN_REQUIRED");
-          log("→ REGISTRATION_HUMAN_REQUIRED (auto-solve exhausted)");
-          const successPromise = browser.listenForRegistrationSuccess(page);
-          await cb.onHumanRequired(id, email, "registration captcha (auto-solve failed)");
-          log("human resolved, waiting for register response...");
-          const afterHuman = await successPromise;
+          log("⚠️  SOLVE CAPTCHA IN BROWSER — waiting for registration response...");
+          const afterHuman = await browser.listenForRegistrationSuccess(page);
           log(
             `post-captcha result: state=${afterHuman.state}${afterHuman.error ? ` error=${afterHuman.error}` : ""}`,
           );
@@ -202,15 +197,9 @@ export async function runAccount(
             `auto-solve result: state=${solveResult.state}${solveResult.error ? ` error=${solveResult.error}` : ""}`,
           );
           if (solveResult.state !== "solved") {
-            log(`auto-solve failed, falling back to human: ${solveResult.error}`);
+            log(`auto-solve failed: ${solveResult.error} — ⚠️  SOLVE IN BROWSER, waiting...`);
             await transition(batch, idx, "LOGIN_HUMAN_REQUIRED");
-            const successPromise = browser.listenForLoginSuccess(page);
-            await cb.onHumanRequired(
-              id,
-              email,
-              `login captcha (auto-solve failed: ${solveResult.error})`,
-            );
-            const afterHuman = await successPromise;
+            const afterHuman = await browser.listenForLoginSuccess(page);
             if (afterHuman.state !== "authenticated") {
               await fail(batch, idx, afterHuman.error ?? "Login failed after captcha");
               return;
@@ -222,11 +211,8 @@ export async function runAccount(
             .catch(() => {});
         } else {
           await transition(batch, idx, "LOGIN_HUMAN_REQUIRED");
-          log("→ LOGIN_HUMAN_REQUIRED");
-          const successPromise = browser.listenForLoginSuccess(page);
-          await cb.onHumanRequired(id, email, "login captcha");
-          log("human resolved, waiting for login response...");
-          const afterHuman = await successPromise;
+          log("⚠️  LOGIN CAPTCHA — SOLVE IN BROWSER, waiting...");
+          const afterHuman = await browser.listenForLoginSuccess(page);
           log(
             `post-login-captcha: state=${afterHuman.state}${afterHuman.error ? ` error=${afterHuman.error}` : ""}`,
           );
