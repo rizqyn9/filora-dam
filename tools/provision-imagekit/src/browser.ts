@@ -1,4 +1,4 @@
-import { type BrowserContext, type Page } from "playwright";
+import { type Page } from "playwright";
 import type { Config } from "./config.js";
 import { regionCode } from "./config.js";
 import { randomDelay, humanType } from "./stealth.js";
@@ -44,7 +44,9 @@ export async function solveRecaptchaWithBuster(
   try {
     // Click the reCAPTCHA checkbox
     await anchorFrame.locator("#recaptcha-anchor-label").click();
-    await page.waitForTimeout(randomDelay(1000, 2000));
+    await page.waitForTimeout(1000);
+
+    console.debug({ a: `await anchorFrame.locator("#recaptcha-anchor-label").click();` });
 
     // Check if already solved (no challenge needed)
     const alreadySolved = await anchorFrame.locator('[aria-checked="true"]').count();

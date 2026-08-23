@@ -17,6 +17,7 @@ import {
 import { runAccount, type WorkerCallbacks } from "./worker.js";
 import { BROWSER_ARGS, CONTEXT_OPTIONS } from "./stealth.js";
 import { configureBuster } from "./buster-setup.js";
+import { rootLogger } from "./logger.js";
 
 // @ts-ignore — gmail is JS
 import { authorize } from "./gmail/gmail.js";
@@ -26,8 +27,7 @@ const { positionals, values } = parseArgs({
   options: {
     config: { type: "string", short: "c", default: "config.yaml" },
     output: { type: "string", short: "o", default: "output" },
-    concurrency: { type: "string", default: "3" },
-    "spawn-delay": { type: "string", default: "10" },
+    concurrency: { type: "string", default: "10" },
   },
   allowPositionals: true,
 });
@@ -36,7 +36,6 @@ const command = positionals[0] ?? "run";
 const cfgPath = values.config!;
 const outputDir = values.output!;
 const concurrency = parseInt(values.concurrency!, 10) || 3;
-const spawnDelaySec = parseInt(values["spawn-delay"]!, 10) || 10;
 
 setOutputDir(outputDir);
 
@@ -44,9 +43,9 @@ async function main() {
   const cfg = loadConfig(cfgPath);
 
   // Initialize Gmail API upfront
-  console.log("Connecting to Gmail...");
+  rootLogger.info("Connecting to Gmail...");
   await authorize();
-  console.log("Gmail connected.\n");
+  rootLogger.info("Gmail connected.\n");
 
   let batch: Batch;
 
@@ -54,13 +53,13 @@ async function main() {
     const emails = Array.from({ length: cfg.batch_size }, () => generateEmail(cfg.email_domain));
     batch = newBatch(emails);
     saveBatch(batch);
-    console.log(`Batch: ${batch.id} (${batch.accounts.length} accounts)`);
-    console.log(`State: ${batchPath(batch)}`);
-    console.log(`Concurrency: ${concurrency}\n`);
+    rootLogger.info(`Batch: ${batch.id} (${batch.accounts.length} accounts)`);
+    rootLogger.info(`State: ${batchPath(batch)}`);
+    rootLogger.info(`Concurrency: ${concurrency}\n`);
   } else if (command === "resume") {
     const batchId = positionals[1];
     if (!batchId) {
-      console.error("Usage: bun src/index.ts resume <batch-id>");
+      rootLogger.error("Usage: bun src/index.ts resume <batch-id>");
       process.exit(1);
     }
     batch = loadBatch(batchId);
@@ -68,7 +67,6 @@ async function main() {
     let resetCount = 0;
     for (const a of batch.accounts) {
       if (a.status !== "FAILED") continue;
-      const prev = a.status;
       a.error = undefined;
       if (a.private_key) {
         a.status = "COMPLETED"; // already done
@@ -82,17 +80,17 @@ async function main() {
         a.status = "CREATED"; // nothing saved, start fresh
       }
       resetCount++;
-      console.log(`  reset [${a.id}] ${a.email}: FAILED → ${a.status}`);
+      rootLogger.info(`  reset [${a.id}] ${a.email}: FAILED → ${a.status}`);
     }
     if (resetCount > 0) {
       saveBatch(batch);
-      console.log(`  (${resetCount} accounts reset)\n`);
+      rootLogger.info(`  (${resetCount} accounts reset)\n`);
     }
     saveBatch(batch);
-    console.log(`Resuming: ${batch.id} (${batch.accounts.length} accounts)`);
-    console.log(`State: ${batchPath(batch)}\n`);
+    rootLogger.info(`Resuming: ${batch.id} (${batch.accounts.length} accounts)`);
+    rootLogger.info(`State: ${batchPath(batch)}\n`);
   } else {
-    console.error(`Unknown command: ${command}\nUsage: run | resume <batch-id>`);
+    rootLogger.error(`Unknown command: ${command}\nUsage: run | resume <batch-id>`);
     process.exit(1);
   }
 
@@ -102,24 +100,19 @@ async function main() {
     .filter((i) => i >= 0);
 
   if (pending.length === 0) {
-    console.log("All accounts already completed.");
+    rootLogger.info("All accounts already completed.");
     printSummary(batch);
     process.exit(0);
   }
 
-  console.log(`Accounts to process: ${pending.length}`);
-  console.log(`Concurrency: ${concurrency} | Spawn delay: ${spawnDelaySec}s`);
-  console.log("Launching browsers...\n");
+  rootLogger.info(`Accounts to process: ${pending.length}`);
+  rootLogger.info(`Concurrency: ${concurrency}`);
+  rootLogger.info("Launching browsers...\n");
 
-  const callbacks: WorkerCallbacks = {
-    log(accountId, msg) {
-      console.log(`  ${ts()} [${accountId}] ${msg}`);
-    },
-  };
+  const callbacks: WorkerCallbacks = {};
 
-  // Each worker gets its own browser instance — full cookie/session isolation
-  async function launchWorkerBrowser() {
-    const dataDir = mkdtempSync(join(tmpdir(), "imagekit-worker-"));
+  async function launchWorkerBrowser(email: string) {
+    const dataDir = mkdtempSync(join(tmpdir(), `ik-${email.split("@")[0]}-`));
     const ctx = await chromium.launchPersistentContext(dataDir, {
       headless: false,
       args: BROWSER_ARGS,
@@ -127,43 +120,33 @@ async function main() {
     });
 
     if (cfg.google_stt_api_key) {
+      rootLogger.info("Prepare buster");
       await configureBuster(ctx, cfg.google_stt_api_key).catch(() => {});
     }
 
     return ctx;
   }
 
-  // Worker pool: run up to `concurrency` accounts simultaneously
-  const queue = [...pending];
-  const running: Promise<void>[] = [];
+  // Launch workers — each picks accounts from the queue sequentially
+  let next = 0;
 
-  async function spawnNext(): Promise<void> {
-    if (queue.length === 0) return;
-    const idx = queue.shift()!;
-    const ctx = await launchWorkerBrowser();
-    const p = runAccount(ctx, cfg, batch, idx, callbacks).then(async () => {
-      await ctx.close().catch(() => {});
-      const i = running.indexOf(p);
-      if (i >= 0) running.splice(i, 1);
-      // ponytail: rate-limit between spawns to avoid burst detection
-      await sleep(spawnDelaySec * 1000 + Math.random() * 5000);
-      spawnNext();
-    });
-    running.push(p);
-  }
+  async function worker(workerId: number) {
+    while (next < pending.length) {
+      const idx = pending[next++];
+      const email = batch.accounts[idx].email;
+      rootLogger.info(`Worker ${workerId}: starting ${email}`);
 
-  // Seed the pool with staggered starts
-  for (let i = 0; i < Math.min(concurrency, queue.length); i++) {
-    await spawnNext();
-    if (i < Math.min(concurrency, queue.length) - 1) {
-      await sleep(spawnDelaySec * 1000 + Math.random() * 3000);
+      const ctx = await launchWorkerBrowser(email);
+      try {
+        await runAccount(ctx, cfg, batch, idx, callbacks);
+      } finally {
+        await ctx.close().catch(() => {});
+      }
     }
   }
 
-  // Wait for all to finish
-  while (running.length > 0) {
-    await Promise.race(running);
-  }
+  const workerCount = Math.min(concurrency, pending.length);
+  await Promise.all(Array.from({ length: workerCount }, (_, i) => worker(i + 1)));
 
   printSummary(batch);
 }
@@ -172,34 +155,28 @@ function printSummary(batch: Batch) {
   const completed = indicesWithStatus(batch, "COMPLETED").length;
   const failed = indicesWithStatus(batch, "FAILED").length;
   const other = batch.accounts.length - completed - failed;
-  console.log(`\n=== SUMMARY ===`);
-  console.log(
+
+  rootLogger.info("=== SUMMARY ===");
+  rootLogger.info(
     `Completed: ${completed} | Failed: ${failed} | In-progress: ${other} | Total: ${batch.accounts.length}`,
   );
+
   if (failed > 0) {
-    console.log(`\nFailed:`);
+    rootLogger.warn("Failed:");
     for (const a of batch.accounts) {
-      if (a.status === "FAILED") console.log(`  [${a.id}] ${a.email} — ${a.error}`);
+      if (a.status === "FAILED") rootLogger.warn(`  [${a.id}] ${a.email} — ${a.error}`);
     }
   }
   if (completed > 0) {
-    console.log(`\nCompleted:`);
+    rootLogger.info("Completed:");
     for (const a of batch.accounts) {
-      if (a.status === "COMPLETED") console.log(`  [${a.id}] ${a.email} → ${a.url_endpoint}`);
+      if (a.status === "COMPLETED") rootLogger.info(`  [${a.id}] ${a.email} → ${a.url_endpoint}`);
     }
   }
-  console.log(`\nState: ${batchPath(batch)}`);
-}
-
-function ts(): string {
-  return new Date().toISOString().slice(11, 19);
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
+  rootLogger.info(`State: ${batchPath(batch)}`);
 }
 
 main().catch((err) => {
-  console.error(err);
+  rootLogger.error(err);
   process.exit(1);
 });

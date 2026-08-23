@@ -37,6 +37,8 @@ export async function humanType(
   text: string,
 ): Promise<void> {
   await page.locator(selector).click();
-  await page.waitForTimeout(randomDelay(200, 500));
-  await page.keyboard.type(text, { delay: randomDelay(40, 100) });
+  // await page.waitForTimeout(randomDelay(200, 500));
+  // await page.keyboard.type(text, { delay: randomDelay(40, 100) });
+  await page.waitForTimeout(5);
+  await page.keyboard.type(text, { delay: 5 });
 }
